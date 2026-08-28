@@ -1,0 +1,26 @@
+
+> taper-calendar-card@1.3.0 test
+> vitest run && playwright test
+
+
+ RUN  v3.2.7 /tmp/stepdown-polish-2-proof.heJgZj/repo
+
+ ✓ src/schedule.test.ts (11 tests) 7ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  18:20:41
+   Duration  533ms (transform 71ms, setup 0ms, collect 55ms, tests 7ms, environment 0ms, prepare 90ms)
+
+[WebServer] (node:21824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:21856) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 31 tests using 1 worker
+(node:21874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:21874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·······························
+  31 passed (23.9s)

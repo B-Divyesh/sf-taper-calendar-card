@@ -1,0 +1,16 @@
+/ 200 https://taper-calendar-card.sociobot.in/
+/demo 200 https://taper-calendar-card.sociobot.in/demo
+/privacy 200 https://taper-calendar-card.sociobot.in/privacy
+/terms 200 https://taper-calendar-card.sociobot.in/terms
+/missing-page 404 https://taper-calendar-card.sociobot.in/missing-page
+
+HEADERS
+HTTP/2 200 
+cache-control: public, must-revalidate, max-age=30
+referrer-policy: strict-origin-when-cross-origin
+x-content-type-options: nosniff
+content-security-policy: default-src 'self'; connect-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+
+ASSET HASHES
+local fc3401b9a306c502b1f14808d13d3e06be766cc4208740941eef9e0fe0b23f01  dist/assets/index-HUifQXKJ.js
+live  fc3401b9a306c502b1f14808d13d3e06be766cc4208740941eef9e0fe0b23f01  -

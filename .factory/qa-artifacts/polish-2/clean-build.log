@@ -1,0 +1,13 @@
+
+> taper-calendar-card@1.3.0 build
+> tsc -b && vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 5 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  1.70 kB │ gzip: 0.60 kB
+dist/assets/index-D78VDpKO.css   8.83 kB │ gzip: 2.89 kB
+dist/assets/index-HUifQXKJ.js   22.19 kB │ gzip: 7.67 kB
+✓ built in 160ms
