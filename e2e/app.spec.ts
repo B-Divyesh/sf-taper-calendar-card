@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 
+const expectedOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173').origin;
+
 async function createCard(page: Page, options: { start?: string; end?: string; dose?: string } = {}) {
   const start = options.start || '2026-12-31';
   const end = options.end || '2027-01-02';
@@ -58,7 +60,7 @@ test('@claim:offline-reload reloads the demo without a network after its first v
 test('@claim:private-device stores and restores a real card without third-party traffic', async ({ page }) => {
   const thirdParty: string[] = [];
   page.on('request', request => {
-    if (!request.url().startsWith('http://127.0.0.1:4173')) thirdParty.push(request.url());
+    if (new URL(request.url()).origin !== expectedOrigin) thirdParty.push(request.url());
   });
   await createCard(page);
   await page.getByRole('button', { name: 'Check this day' }).first().click();
@@ -144,7 +146,7 @@ test('@claim:print-card opens the browser print flow', async ({ page }) => {
 test('@claim:free-no-account offers the complete card without checkout or sign-in', async ({ page }) => {
   const thirdParty: string[] = [];
   page.on('request', request => {
-    if (!request.url().startsWith('http://127.0.0.1:4173')) thirdParty.push(request.url());
+    if (new URL(request.url()).origin !== expectedOrigin) thirdParty.push(request.url());
   });
   await page.goto('/');
   await expect(page.getByText('Free to use. No account or analytics.')).toBeVisible();
@@ -164,7 +166,7 @@ test('@claim:transcription-only keeps the entered dose and dates unchanged', asy
 test('@claim:no-clinical-output offers no dose recommendation or interaction checker', async ({ page }) => {
   const outsideRequests: string[] = [];
   page.on('request', request => {
-    if (!request.url().startsWith('http://127.0.0.1:4173')) outsideRequests.push(request.url());
+    if (new URL(request.url()).origin !== expectedOrigin) outsideRequests.push(request.url());
   });
   await page.goto('/');
   await expect(page.getByText('It does not calculate doses, recommend doses, or check interactions.')).toBeVisible();
