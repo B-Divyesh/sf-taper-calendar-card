@@ -1,4 +1,4 @@
-const CACHE = 'stepdown-v5';
+const CACHE = 'stepdown-v6';
 const SHELL = ['/', '/demo', '/privacy', '/terms', '/index.html', '/404.html', '/404.css', '/404-targets.css', '/404.js', '/manifest.webmanifest', '/favicon.svg', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/hero.webp', '/og.webp'].concat('__ASSETS__');
 
 self.addEventListener('install', event => {

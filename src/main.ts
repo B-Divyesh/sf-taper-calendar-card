@@ -5,6 +5,9 @@ const REAL_KEY = 'stepdown:real:schedule';
 const DEMO_KEY = 'demo:stepdown:schedule';
 const SEALED_KEY = 'stepdown:real:sealed';
 const KNOWN_ROUTES = new Set(['/', '/demo', '/privacy', '/terms']);
+// Bump this with any release that changes persisted-card behavior. It gives
+// immutable app assets a new name while the service worker retires its cache.
+const BUILD_ID = '2026-08-28.2';
 
 let demo = location.pathname === '/demo' || new URLSearchParams(location.search).get('demo') === '1';
 let schedule: Schedule | null = null;
@@ -13,6 +16,15 @@ let editing = false;
 let encryptionPassphrase: string | null = null;
 let notice = '';
 let updateReady = false;
+let storageQueue = Promise.resolve();
+
+// IndexedDB requests are asynchronous. Serialising storage mutations prevents
+// a late plain-card write from overtaking a seal or rejected-import cleanup.
+function inStorageQueue<T>(operation: () => Promise<T>) {
+  const result = storageQueue.then(operation, operation);
+  storageQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 function sample(): Schedule {
   const today = localDate();
@@ -37,37 +49,43 @@ function store() {
 }
 
 async function readStored(key: string) {
-  const db = await store();
-  return new Promise<string | undefined>((resolve, reject) => {
-    const request = db.transaction('cards').objectStore('cards').get(key);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+  return inStorageQueue(async () => {
+    const db = await store();
+    return new Promise<string | undefined>((resolve, reject) => {
+      const request = db.transaction('cards').objectStore('cards').get(key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
 async function writeStored(key: string, value: string) {
-  const db = await store();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction('cards', 'readwrite');
-    const cards = transaction.objectStore('cards');
-    if (key === REAL_KEY) {
-      const sealed = cards.get(SEALED_KEY);
-      sealed.onsuccess = () => {
-        if (sealed.result === undefined) cards.put(value, key);
-      };
-    } else cards.put(value, key);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+  return inStorageQueue(async () => {
+    const db = await store();
+    return new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      if (key === REAL_KEY) {
+        const sealed = cards.get(SEALED_KEY);
+        sealed.onsuccess = () => {
+          if (sealed.result === undefined) cards.put(value, key);
+        };
+      } else cards.put(value, key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   });
 }
 
 async function removeStored(key: string) {
-  const db = await store();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction('cards', 'readwrite');
-    transaction.objectStore('cards').delete(key);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+  return inStorageQueue(async () => {
+    const db = await store();
+    return new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      transaction.objectStore('cards').delete(key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   });
 }
 
@@ -75,31 +93,35 @@ async function removeStored(key: string) {
 // in one committed transaction so a rejected import cannot expose a stale
 // plaintext record, even briefly.
 async function keepEncryptedCardLocked() {
-  const db = await store();
-  return new Promise<boolean>((resolve, reject) => {
-    const transaction = db.transaction('cards', 'readwrite');
-    const cards = transaction.objectStore('cards');
-    const sealed = cards.get(SEALED_KEY);
-    let hasSealedRecord = false;
-    sealed.onsuccess = () => {
-      hasSealedRecord = sealed.result !== undefined;
-      if (hasSealedRecord) cards.delete(REAL_KEY);
-    };
-    sealed.onerror = () => reject(sealed.error);
-    transaction.oncomplete = () => resolve(hasSealedRecord);
-    transaction.onerror = () => reject(transaction.error);
+  return inStorageQueue(async () => {
+    const db = await store();
+    return new Promise<boolean>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      const sealed = cards.get(SEALED_KEY);
+      let hasSealedRecord = false;
+      sealed.onsuccess = () => {
+        hasSealedRecord = sealed.result !== undefined;
+        if (hasSealedRecord) cards.delete(REAL_KEY);
+      };
+      sealed.onerror = () => reject(sealed.error);
+      transaction.oncomplete = () => resolve(hasSealedRecord);
+      transaction.onerror = () => reject(transaction.error);
+    });
   });
 }
 
 async function replaceReal(next: Schedule) {
-  const db = await store();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction('cards', 'readwrite');
-    const cards = transaction.objectStore('cards');
-    cards.put(JSON.stringify(next), REAL_KEY);
-    cards.delete(SEALED_KEY);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+  await inStorageQueue(async () => {
+    const db = await store();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      cards.put(JSON.stringify(next), REAL_KEY);
+      cards.delete(SEALED_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   });
 }
 
@@ -120,14 +142,16 @@ async function seal(value: Schedule, passphrase: string) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await cryptKey(passphrase, salt);
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(JSON.stringify(value)));
-  const db = await store();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction('cards', 'readwrite');
-    const cards = transaction.objectStore('cards');
-    cards.put(JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) }), SEALED_KEY);
-    cards.delete(REAL_KEY);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+  await inStorageQueue(async () => {
+    const db = await store();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      cards.put(JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) }), SEALED_KEY);
+      cards.delete(REAL_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   });
 }
 async function unseal(passphrase: string) {
@@ -186,7 +210,7 @@ function header() {
 }
 
 function footer() {
-  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.3.0<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
+  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.3.0 · build ${BUILD_ID}<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
 }
 
 function landing() {
