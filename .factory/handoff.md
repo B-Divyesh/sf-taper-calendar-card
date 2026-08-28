@@ -1,56 +1,42 @@
-# Repair handoff — taper-calendar-card-polish-1
+# Review handoff — taper-calendar-card-review-2
 
 ## Outcome
 
-Polish round 1 is complete. Every finding in `.factory/review-1.md` is fixed, every historical regression named there remains covered, and no severity is deferred. The cassette-era zine identity and static offline PWA deployment class are unchanged.
+Adversarial review 2 is complete for candidate `b7b6f12a99a4990cde23603f9c6f06dc3137da21` and the matching live deployment.
 
-The repaired product is live at `https://taper-calendar-card.sociobot.in`. Azure Static Web Apps deployment `03f725e0-d19a-40f9-930f-19f326903c44` completed successfully on 2026-08-28 UTC.
+Verdict: **FAIL**. `.factory/review-2.md` records one blocking and six non-blocking findings. No product code was modified.
 
-## What changed
+## What was done
 
-- Promoted the static 404 to a complete site route with metadata, navigation, legal/footer links, version, focusable main content, and keyboard skip handling.
-- Removed the demo’s invalid complementary landmark and made the accessibility gate require zero axe violations in light and dark modes.
-- Reworded and wired `Write my card` and `Leave demo and write a card` to focus the real editor.
-- Verified both `/demo` and `/?demo=1` as one-click, resettable, memory-only sample paths that restore real data safely.
-- Added exact `no-clinical-output` and `no-passphrase-recovery` claims and browser tests; all 13 claim entries now have exactly one tagged test.
-- Added route-specific descriptions and Open Graph/Twitter/canonical metadata.
-- Rewrote README implementation jargon in plain words, completed the copy audit, and added the 81-character verb-first catalog description.
-- Bumped the visible build to v1.2.0 and the offline cache to `stepdown-v4`.
+- Opened the live site cold in fresh 390 × 844 and 1440 × 900 browser contexts.
+- Audited every landing-page phrase and README sentence for word count, jargon, terminology, headings, and action labels.
+- Exercised the one-click demo, direct demo URL, Reset, real-data preservation, exit, offline reload, and intercepted network traffic.
+- Ran all 13 exact claim commands separately from a clean clone.
+- Rechecked every review-1 finding against both live behavior and source, plus the cumulative regressions recorded by polish 1.
+- Crawled routes and links; checked status codes, metadata, h1/outline, canonical/OG/favicon assets, 404, focus and Back behavior, target sizes, light/dark axe results, and the product-specific visual identity.
+- Checked missed leverage and found no justified AI, sync, or additional import/export feature.
 
-Finding-by-finding evidence is in `.factory/polish-1.md`.
+## Verification evidence
 
-## Verification
+- Clean clone: `/tmp/taper-review-2-clean.uz8HlC/repo`
+- `npm ci`: pass, 177 packages, 0 vulnerabilities
+- All 13 commands from `.factory/claims.json`: pass
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm test`: pass, 11 unit + 30 browser tests
+- `npm run build`: pass; `dist/` produced; JS 21.70 kB / 7.51 kB gzip
+- Live `PLAYWRIGHT_BASE_URL=... npx playwright test`: pass, 30 tests
+- Factory URL verifier: pass; report in `/tmp/stepdown-review-2-verify/verify.json`
+- Independent live axe scans: zero violations on `/`, `/demo`, `/privacy`, `/terms`, and `/missing-page`, light and dark
+- Live and clean-build HTML/JS/CSS hashes: identical
+- No third-party requests or unexpected console/page errors in exercised app flows
 
-Run locally:
+## Open findings
 
-```bash
-npm ci
-npm run typecheck
-npm run lint
-npm test
-npm run build
-```
+- **F-2-1 BLOCKING:** The first mobile demo viewport contains no schedule row and uses generic “Example medication” data.
+- **F-2-2:** The private-session deletion statement is misleading and unlisted.
+- **F-2-3:** “Every safety check” is a vague, unlisted backup-validation claim.
+- **F-2-4 through F-2-6:** Three plain-word copy defects remain.
+- **F-2-7:** The 404 Terms target is 39 × 44 px instead of at least 44 × 44 px.
 
-Results:
-
-- `npm ci`: 177 packages, 0 vulnerabilities.
-- `npm run typecheck`: pass.
-- `npm run lint`: pass.
-- `npm test`: pass, 11 Vitest tests and 30 Playwright tests.
-- `npm run build`: pass; `dist/index.html` exists.
-- Production output: 21.70 kB JavaScript (7.51 kB gzip), 8.37 kB CSS (2.79 kB gzip), and 100,952-byte hero art.
-- Clean-clone claims: all 13 exact commands from `.factory/claims.json` passed independently after `npm ci`.
-- Local factory URL verifier: pass with zero console errors.
-- Live factory URL verifier: pass with zero console errors.
-- Live browser suite: all 30 tests passed against the production origin.
-- Live route status: `/`, `/demo`, `/?demo=1`, `/privacy`, and `/terms` return 200; `/missing-page` returns 404.
-- Live Lighthouse mobile: performance 100, accessibility 100, best practices 100, SEO 100; FCP 0.8 s, LCP 1.4 s, TBT 10 ms, CLS 0.
-- Accessibility: zero axe violations across home, demo, privacy, terms, and standalone 404 in light and dark modes.
-- Privacy: tested card and demo flows make no third-party request; there are no analytics, accounts, remote fonts, or remote scripts.
-- Offline: the sample reloads from the service worker after the browser network is disabled.
-
-Evidence is stored under `.factory/qa-artifacts/polish-1/`.
-
-## Known gaps and next steps
-
-None. No finding, TODO, stub, or deferred minor item remains.
+The concrete fixes and required follow-up tests are in `.factory/review-2.md`.
