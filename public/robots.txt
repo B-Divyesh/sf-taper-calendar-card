@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://taper-calendar-card.sociobot.in/sitemap.xml

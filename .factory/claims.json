@@ -1,0 +1,5 @@
+[
+  {"id":"offline-reload","claim":"Works after you first open it","where":"landing hero","test":"npm test -- --grep @claim:offline-reload","sandbox":"The service worker precaches the built app shell and demo route after first visit; manual browser test uses offline reload."},
+  {"id":"csv-export","claim":"Exports CSV","where":"schedule toolbar","test":"npm test -- --grep @claim:csv-export","sandbox":"Unit test uses the supplied three-day schedule and asserts one header plus one row for every scheduled day."},
+  {"id":"private-device","claim":"Stores your card on this device","where":"landing facts, editor","test":"npm test -- --grep @claim:private-device","sandbox":"Source test asserts this static app has no network call except optional license verification and service-worker registration."}
+]
