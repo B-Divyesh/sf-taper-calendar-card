@@ -19,6 +19,12 @@ Live URL: `https://taper-calendar-card.sociobot.in`
 | F-2-6 | Rewrote README storage wording as “Cards stay in this browser on the current device.” | README copy audit; `@claim:private-device`; clean-clone and live tests. |
 | F-2-7 | Added a 44 px minimum width to standalone-404 footer links. | Playwright `the real editor fits 390px and key mobile touch targets are at least 44px`; `.factory/qa-artifacts/polish-2/live-404-mobile.png`; live `/missing-page` returns 404. |
 
+## Controller evidence finding
+
+| Finding | Change made | Evidence |
+| --- | --- | --- |
+| C-2-1 `@claim:backup-validation` missing-field regression | Made record deletion wait for the IndexedDB transaction commit. Rejected imports now call `keepEncryptedCardLocked()`, which reads the sealed record and deletes any plaintext record in the same committed transaction. The sealed bytes are never rewritten. | Exact command `npm run test:e2e -- --workers=1`: 31/31 pass. Playwright `@claim:backup-validation rejects every named invalid backup and preserves the locked card` checks missing-field, invalid-date, reversed-range, and overlap inputs, asserting byte-identical sealed storage and no plaintext record after each; local `/` lock-screen flow. |
+
 ## Review 1 cumulative re-check
 
 | Finding | Change retained or rechecked | Evidence |
@@ -32,8 +38,8 @@ Live URL: `https://taper-calendar-card.sociobot.in`
 
 ## Complete release evidence
 
-- Clean clone at `/tmp/stepdown-polish-2-proof.heJgZj/repo`: all 14 claim commands pass separately; full suite passes 11 unit + 31 browser; typecheck, lint, and build pass.
-- Clean build: JS 22.19 kB / 7.67 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
+- This repair: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and the exact single-worker browser command pass locally. The clean-clone claim/build evidence is recorded in the repair handoff.
+- Clean production build after the repair: JS 22.46 kB / 7.74 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
 - Live factory verifier: no console errors; title, `lang`, h1, main, alt text, and button names pass.
 - Live Playwright suite: 31/31, including offline, privacy request interception, route titles/canonicals, Back/focus announcement, 404 crawl, touch sizes, keyboard, and zero axe violations.
 - Live route/status/header/hash evidence: `.factory/qa-artifacts/polish-2/live-route-checks.log`.

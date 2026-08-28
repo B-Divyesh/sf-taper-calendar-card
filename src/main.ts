@@ -64,9 +64,30 @@ async function writeStored(key: string, value: string) {
 async function removeStored(key: string) {
   const db = await store();
   return new Promise<void>((resolve, reject) => {
-    const request = db.transaction('cards', 'readwrite').objectStore('cards').delete(key);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    const transaction = db.transaction('cards', 'readwrite');
+    transaction.objectStore('cards').delete(key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+// A sealed record is the authority while a card is locked.  Keep this cleanup
+// in one committed transaction so a rejected import cannot expose a stale
+// plaintext record, even briefly.
+async function keepEncryptedCardLocked() {
+  const db = await store();
+  return new Promise<boolean>((resolve, reject) => {
+    const transaction = db.transaction('cards', 'readwrite');
+    const cards = transaction.objectStore('cards');
+    const sealed = cards.get(SEALED_KEY);
+    let hasSealedRecord = false;
+    sealed.onsuccess = () => {
+      hasSealedRecord = sealed.result !== undefined;
+      if (hasSealedRecord) cards.delete(REAL_KEY);
+    };
+    sealed.onerror = () => reject(sealed.error);
+    transaction.oncomplete = () => resolve(hasSealedRecord);
+    transaction.onerror = () => reject(transaction.error);
   });
 }
 
@@ -264,8 +285,7 @@ async function importBackup(file: File) {
     notice = 'Backup imported.';
     app();
   } catch {
-    if (await readStored(SEALED_KEY)) {
-      await removeStored(REAL_KEY);
+    if (await keepEncryptedCardLocked()) {
       locked = true;
       schedule = null;
       encryptionPassphrase = null;

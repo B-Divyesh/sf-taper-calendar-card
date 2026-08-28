@@ -4,7 +4,7 @@
 
 All findings in `.factory/review-1.md` and `.factory/review-2.md` are closed. The repaired static PWA is live at `https://taper-calendar-card.sociobot.in` and the deployed JavaScript hash matches the local production build.
 
-Implementation commits: `e3f0f47`, `c8ac848`, and `5cd5758`. Azure Static Web Apps deployment ID: `fe7442f8-5c38-4bab-b02d-f260fa21facd`.
+Implementation commits: `e3f0f47`, `c8ac848`, `5cd5758`, and the final transaction-repair commit recorded below. Deployment evidence is updated after the final production upload.
 
 ## What changed
 
@@ -13,19 +13,21 @@ Implementation commits: `e3f0f47`, `c8ac848`, and `5cd5758`. Azure Static Web Ap
 - Rewrote the landing eyebrow, privacy removal instructions, encrypted-backup assurance, README heading, README storage wording, and catalog description in plain words.
 - Added the `backup-validation` registry entry and claim test. It rejects missing fields, invalid dates, reversed ranges, and overlapping steps while preserving the encrypted record.
 - Made encrypted storage transitions atomic and prevented stale plaintext writes whenever an encrypted record exists.
+- Fixed the final encrypted-import regression: invalid imports now preserve the sealed bytes and clear any stale plaintext in one committed IndexedDB transaction. Storage cleanup waits for transaction completion before the app reports the rejected import.
 - Enlarged every standalone-404 footer link to at least 44 × 44 px and updated route version metadata.
 - Retained the cassette-zine visual system, original generated collage, light/dark treatments, and offline static-PWA architecture.
 
 ## Verification
 
-Final clean clone: `/tmp/stepdown-polish-2-proof.heJgZj/repo` at `5cd5758686edfeedf7de8e54bda5a6783f8187c6`.
+Final clean-clone commit, deployment identifier, and live verification are recorded below after the final production upload.
 
 - `npm ci`: pass; 177 packages; 0 vulnerabilities.
 - Every one of the 14 exact commands in `.factory/claims.json`: pass individually. Log: `.factory/qa-artifacts/polish-2/clean-claim-tests.log`.
 - `npm run typecheck`: pass.
 - `npm run lint`: pass.
 - `npm test`: pass; 11 unit tests and 31 Playwright tests.
-- `npm run build`: pass; `dist/index.html` present. Initial JS 22.19 kB / 7.67 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
+- Exact mandated command `npm run test:e2e -- --workers=1`: pass; 31/31. This includes the four-case `@claim:backup-validation` test, which proves invalid backup inputs retain byte-identical sealed storage and no plaintext record.
+- `npm run build`: pass; `dist/index.html` present. Initial JS 22.46 kB / 7.74 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
 - Accessibility: Playwright axe 4.10.2 reports zero violations on `/`, `/demo`, `/privacy`, `/terms`, and `/404.html` in light and dark modes.
 - Privacy: claim tests and the live cold flow observed no third-party requests.
 - Offline: `@claim:offline-reload` passed from the clean clone and against the live deployment.
