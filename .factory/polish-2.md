@@ -4,7 +4,7 @@ Date: 2026-08-28 UTC
 Work order: `taper-calendar-card-polish-2`  
 Reviewed candidate: `b7b6f12a99a4990cde23603f9c6f06dc3137da21`  
 Review report: `914a981637a5357ce16521b2897e86595a7d392d:.factory/review-2.md`  
-Repair head deployed: `5cd5758686edfeedf7de8e54bda5a6783f8187c6`  
+Repair head deployed: `8e14652cf9606d4c98dd34840c817771598345b1`
 Live URL: `https://taper-calendar-card.sociobot.in`
 
 ## Review 2 finding map
@@ -23,7 +23,7 @@ Live URL: `https://taper-calendar-card.sociobot.in`
 
 | Finding | Change made | Evidence |
 | --- | --- | --- |
-| C-2-1 `@claim:backup-validation` missing-field regression | Made record deletion wait for the IndexedDB transaction commit. Rejected imports now call `keepEncryptedCardLocked()`, which reads the sealed record and deletes any plaintext record in the same committed transaction. The sealed bytes are never rewritten. | Exact command `npm run test:e2e -- --workers=1`: 31/31 pass. Playwright `@claim:backup-validation rejects every named invalid backup and preserves the locked card` checks missing-field, invalid-date, reversed-range, and overlap inputs, asserting byte-identical sealed storage and no plaintext record after each; local `/` lock-screen flow. |
+| C-2-1 `@claim:backup-validation` missing-field regression | Serialized all IndexedDB reads and mutations, so a plain-card write cannot overtake encryption or rejected-import cleanup. Rejected imports call `keepEncryptedCardLocked()`, which retains the sealed bytes and removes any plaintext record in the same committed transaction. The service worker now uses cache `stepdown-v6` and the app uses a new hashed asset, so installed clients receive this repair. | Exact command `npm run test:e2e -- --workers=1`: 31/31 pass in three consecutive local runs. Playwright `@claim:backup-validation rejects every named invalid backup and preserves the locked card` checks missing-field, invalid-date, reversed-range, and overlap inputs, asserting byte-identical sealed storage and no plaintext record after each. Fresh-clone run and live `https://taper-calendar-card.sociobot.in` run: 31/31 pass. |
 
 ## Review 1 cumulative re-check
 
@@ -38,12 +38,12 @@ Live URL: `https://taper-calendar-card.sociobot.in`
 
 ## Complete release evidence
 
-- This repair: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and the exact single-worker browser command pass locally. The clean-clone claim/build evidence is recorded in the repair handoff.
-- Clean production build after the repair: JS 22.46 kB / 7.74 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
+- Fresh clone at `/tmp/stepdown-final-v6-clean.7AHtld/repo` from `8e14652`: all 14 exact claim commands pass separately; `typecheck`, `lint`, full unit/browser suite, and build pass.
+- Exact `npm run test:e2e -- --workers=1`: 31/31 pass locally and against the final live origin. Production build: JS 22.72 kB / 7.82 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
 - Live factory verifier: no console errors; title, `lang`, h1, main, alt text, and button names pass.
 - Live Playwright suite: 31/31, including offline, privacy request interception, route titles/canonicals, Back/focus announcement, 404 crawl, touch sizes, keyboard, and zero axe violations.
 - Live route/status/header/hash evidence: `.factory/qa-artifacts/polish-2/live-route-checks.log`.
 - Live Lighthouse: 100 performance, 100 accessibility, 100 best practices, 100 SEO; report and summary are in `.factory/qa-artifacts/polish-2/`.
 - Live cold screenshots: `live-demo-first-screen.png`, `live-404-mobile.png`, and `live-verify/`.
 
-All 13 findings across both reviews are resolved. No severity is deferred.
+All 13 review findings plus the controller’s encrypted-import regression are resolved. No severity is deferred.
