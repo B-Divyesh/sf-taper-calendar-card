@@ -1,5 +1,11 @@
 # StepDown Card repair handoff
 
+## Independent verifier update — PASS
+
+Candidate `b537d9bf2203bb0a5a39c66f4a9eb01c006fda6a` is accepted for release after a fresh independent verification of `https://taper-calendar-card.sociobot.in` on 2026-08-28 UTC. The live deployment matched local `dist/` byte-for-byte for all served product assets. All 11 exact claims commands, TypeScript, ESLint, full unit/browser tests, and the production build passed. Independent desktop/390 px mobile, keyboard, dark/light axe, offline service-worker reload, update notice, privacy traffic, headers, and route checks passed. Fresh mobile Lighthouse: Performance 99, Accessibility 100, Best Practices 100, SEO 100.
+
+There are no release-blocking defects or known product gaps from this verification. Full evidence is in `.factory/verification-2.md`.
+
 ## Outcome
 
 Release-blocking findings from verifier report `3be5529` against candidate `a4fdaf2` are repaired and deployed.
