@@ -92,8 +92,15 @@ async function seal(value: Schedule, passphrase: string) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await cryptKey(passphrase, salt);
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(JSON.stringify(value)));
-  await writeStored(SEALED_KEY, JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) }));
-  await removeStored(REAL_KEY);
+  const db = await store();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction('cards', 'readwrite');
+    const cards = transaction.objectStore('cards');
+    cards.put(JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) }), SEALED_KEY);
+    cards.delete(REAL_KEY);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
 }
 async function unseal(passphrase: string) {
   const item = await readStored(SEALED_KEY);
@@ -250,6 +257,7 @@ async function importBackup(file: File) {
     notice = 'Backup imported.';
     app();
   } catch {
+    if (locked) await removeStored(REAL_KEY);
     notice = 'That backup is incomplete or unsafe. Your current card was not changed.';
     app();
   }
