@@ -48,9 +48,16 @@ async function readStored(key: string) {
 async function writeStored(key: string, value: string) {
   const db = await store();
   return new Promise<void>((resolve, reject) => {
-    const request = db.transaction('cards', 'readwrite').objectStore('cards').put(value, key);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    const transaction = db.transaction('cards', 'readwrite');
+    const cards = transaction.objectStore('cards');
+    if (key === REAL_KEY) {
+      const sealed = cards.get(SEALED_KEY);
+      sealed.onsuccess = () => {
+        if (sealed.result === undefined) cards.put(value, key);
+      };
+    } else cards.put(value, key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
   });
 }
 
@@ -257,7 +264,12 @@ async function importBackup(file: File) {
     notice = 'Backup imported.';
     app();
   } catch {
-    if (locked) await removeStored(REAL_KEY);
+    if (await readStored(SEALED_KEY)) {
+      await removeStored(REAL_KEY);
+      locked = true;
+      schedule = null;
+      encryptionPassphrase = null;
+    }
     notice = 'That backup is incomplete or unsafe. Your current card was not changed.';
     app();
   }
