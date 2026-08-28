@@ -8,7 +8,7 @@ StepDown Card treats a clinician's written regimen like a carefully labelled cas
 
 - **Ink:** `#172821` (primary text), **paper:** `#f6f0df` (warm background), **label:** `#fffaf0` (surfaces).
 - **Tape green:** `#1f6f5f` (actions), **oxide:** `#b84732` (safety and danger), **sun:** `#d98b19` (step markers), **graphite:** `#56615a` (muted text).
-- **Night mode:** `#172821` background, `#f6f0df` text, `#234d42` surface. Contrast is maintained at 4.5:1 or higher.
+- **Night mode:** `#172821` background, `#f6f0df` text, `#234d42` surface, `#ffd166` focus. Text stays above 4.5:1; focus and controls stay above 3:1.
 - **Type:** self-host-free system stacks: `ui-monospace` for dates, doses, and tape labels; `Georgia` for the humane editorial display voice. No remote font requests.
 - **Spacing:** 4 px base, with 8/12/16/24/32/48 px intervals. Paper columns top out at 70 characters.
 
@@ -18,7 +18,7 @@ Schedule steps look like numbered cassette tracks: colored left-edge tabs, punch
 
 ## Art plan and provenance
 
-Hero art is an original raster collage: an opened cassette case, blank dosage cards, calendar squares, tape texture, and no readable text. It is used as supporting context, never as a source of instructions. Generated with the factory Azure image deployment on 2026-08-28 from the prompt recorded in `assets/hero-prompt.json`; no brands, people, logos, or watermark. Exported as a compressed WebP under 300 KB.
+Hero art is an original raster collage: an opened cassette case, blank dosage cards, calendar squares, tape texture, and no readable text. It is used as supporting context, never as a source of instructions. Generated with the factory Azure image deployment on 2026-08-28 from the prompt recorded in `assets/hero-source.png.json`; no brands, people, logos, or watermark. Exported as a compressed WebP under 300 KB.
 
 ## Why this fits
 
