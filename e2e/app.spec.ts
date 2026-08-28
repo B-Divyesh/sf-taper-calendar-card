@@ -54,7 +54,7 @@ test('@claim:offline-reload reloads the demo without a network after its first v
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Example medication' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeVisible();
 });
 
 test('@claim:private-device stores and restores a real card without third-party traffic', async ({ page }) => {
@@ -214,16 +214,61 @@ for (const timezoneId of ['Pacific/Auckland', 'Pacific/Kiritimati', 'Etc/GMT+12'
   });
 }
 
-test('a malformed backup never replaces a valid card or bricks reload', async ({ page }) => {
+test('@claim:backup-validation rejects every named invalid backup and preserves the locked card', async ({ page }) => {
   const errors: Error[] = [];
   page.on('pageerror', error => errors.push(error));
   await createCard(page);
-  const malformed = { id: 'bad', medication: 'Unsafe', clinicianText: 'Directions', createdAt: new Date().toISOString(), steps: [{ id: 'x', start: '2026-01-01', end: '2026-01-01', dose: '5 mg', instructions: '' }] };
-  await page.locator('#import-json').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(malformed)) });
-  await expect(page.getByText('Your current card was not changed.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
+  await page.getByLabel('New passphrase').fill('preserve locked card');
+  await page.getByRole('button', { name: 'Encrypt this card' }).click();
+  await waitForEncryptedCard(page);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
+  const sealedBefore = await page.evaluate(async () => {
+    const request = indexedDB.open('stepdown-card', 1);
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return new Promise<string>((resolve, reject) => {
+      const get = db.transaction('cards').objectStore('cards').get('stepdown:real:sealed');
+      get.onsuccess = () => resolve(get.result);
+      get.onerror = () => reject(get.error);
+    });
+  });
+  const base = {
+    id: 'candidate', medication: 'Candidate', clinicianText: 'Directions', createdAt: new Date().toISOString(),
+    acknowledgements: {}, steps: [{ id: 'one', start: '2026-01-01', end: '2026-01-02', dose: '5 mg', instructions: '' }]
+  };
+  const invalidBackups = [
+    { name: 'missing-field', value: { ...base, medication: undefined } },
+    { name: 'invalid-date', value: { ...base, steps: [{ ...base.steps[0], start: 'not-a-date' }] } },
+    { name: 'reversed-range', value: { ...base, steps: [{ ...base.steps[0], start: '2026-01-03', end: '2026-01-01' }] } },
+    { name: 'overlap', value: { ...base, steps: [base.steps[0], { ...base.steps[0], id: 'two', start: '2026-01-02', end: '2026-01-03' }] } }
+  ];
+  for (const backup of invalidBackups) {
+    await test.step(backup.name, async () => {
+      await page.locator('#import-json').setInputFiles({ name: `${backup.name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup.value)) });
+      await expect(page.getByText('Your current card was not changed.')).toBeVisible();
+      const storedAfter = await page.evaluate(async () => {
+        const request = indexedDB.open('stepdown-card', 1);
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        return new Promise<{ sealed?: string; plain?: string }>((resolve, reject) => {
+          const transaction = db.transaction('cards');
+          const cards = transaction.objectStore('cards');
+          const sealed = cards.get('stepdown:real:sealed');
+          const plain = cards.get('stepdown:real:schedule');
+          transaction.oncomplete = () => resolve({ sealed: sealed.result, plain: plain.result });
+          transaction.onerror = () => reject(transaction.error);
+        });
+      });
+      expect(storedAfter.sealed).toBe(sealedBefore);
+      expect(storedAfter.plain).toBeUndefined();
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
+    });
+  }
   expect(errors).toEqual([]);
 });
 
@@ -279,7 +324,7 @@ test('client navigation enters demo, restores real data, focuses headings, and u
   await page.getByRole('link', { name: 'Demo' }).click();
   await expect(page).toHaveURL(/\/demo$/);
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Example medication' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeFocused();
   await page.getByRole('button', { name: 'Leave demo and write a card' }).click();
   await expect(page.getByLabel('Medication or treatment name')).toHaveValue('Prednisone');
   await expect(page.getByLabel('Medication or treatment name')).toBeFocused();
@@ -296,7 +341,7 @@ test('the query demo path is isolated, resettable, and returns to real data', as
   await page.goto('/?demo=1');
   await expect(page).toHaveTitle('Demo — StepDown Card');
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Example medication' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeVisible();
   await page.getByRole('button', { name: 'Check this day' }).first().click();
   await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Reset demo' }).click();
@@ -349,7 +394,7 @@ test('the standalone 404 has complete navigation, metadata, legal links, and a w
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveCount(1);
-  await expect(page.getByText(/Built by Param Factory · v1\.2\.0/)).toBeVisible();
+  await expect(page.getByText(/Built by Param Factory · v1\.3\.0/)).toBeVisible();
   const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href).filter(href => !href.includes('#main')));
   for (const href of new Set(hrefs)) expect((await request.get(href)).ok(), href).toBe(true);
   await page.keyboard.press('Tab');
@@ -409,6 +454,26 @@ test('the first screen is complete at 390px and Write my card focuses the editor
   await context.close();
 });
 
+test('one click shows a realistic date, dose, and check control in the 390px first demo screen', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Try it with sample data' }).click();
+  await expect(page).toHaveURL(/\/demo$/);
+  await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeVisible();
+  await expect(page.getByText('20 mg once daily').first()).toBeVisible();
+  const targets = [page.locator('.day time').first(), page.getByRole('button', { name: 'Check this day' }).first()];
+  for (const target of targets) {
+    await expect(target).toBeVisible();
+    const box = await target.boundingBox();
+    expect(box, 'demo target bounding box').not.toBeNull();
+    expect(box!.y + box!.height, 'demo target bottom edge').toBeLessThanOrEqual(844);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await context.close();
+});
+
 test('the real editor fits 390px and key mobile touch targets are at least 44px', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
@@ -427,5 +492,14 @@ test('the real editor fits 390px and key mobile touch targets are at least 44px'
   await page.goto('/demo');
   const demoBoxes = await page.locator('.demo button').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
   demoBoxes.forEach(height => expect(height).toBeGreaterThanOrEqual(44));
+  await page.goto('/404.html');
+  const footerBoxes = await page.locator('footer a').evaluateAll(elements => elements.map(element => {
+    const rect = element.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  }));
+  footerBoxes.forEach(box => {
+    expect(box.width, '404 footer link width').toBeGreaterThanOrEqual(44);
+    expect(box.height, '404 footer link height').toBeGreaterThanOrEqual(44);
+  });
   await context.close();
 });

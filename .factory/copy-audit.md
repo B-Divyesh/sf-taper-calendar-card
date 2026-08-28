@@ -1,6 +1,6 @@
 # Copy audit
 
-Audited 2026-08-28 after polish round 1. Word counts treat a hyphenated term, URL, version, or control name as one word.
+Audited 2026-08-28 after polish round 2. Word counts treat a hyphenated term, URL, version, or control name as one word.
 
 ## Landing `/`
 
@@ -13,7 +13,7 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | Demo | 1 | pass |
 | Card | 1 | pass |
 | Privacy | 1 | pass |
-| Private taper transcription | 3 | pass |
+| Copy your clinician’s taper | 4 | pass |
 | Track your taper day by day | 6 | pass |
 | For people following clinician instructions who need each dose and checked day in one private card. | 16 | pass |
 | Try it with sample data | 6 | pass |
@@ -57,7 +57,7 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | A private card for a clinician-provided taper. | 7 | pass |
 | Terms | 1 | pass |
 | Built by Param Factory | 4 | pass |
-| v1.2.0 | 1 | pass |
+| v1.3.0 | 1 | pass |
 | Original generated collage; provenance is in the design notes. | 9 | pass |
 
 ## README
@@ -75,7 +75,7 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | Demo changes stay in memory and are discarded on reload or exit. | 12 | pass |
 | Deploy the generated `dist/` folder as a static site. | 9 | pass |
 | The app saves the files it needs for offline use. | 10 | pass |
-| Cards stay in browser storage on the current device. | 9 | pass |
+| Cards stay in this browser on the current device. | 9 | pass |
 | You can print a card or export CSV for the day-by-day log. | 12 | pass |
 | You can export a full JSON backup and import it later. | 11 | pass |
 | You can optionally encrypt a real card with a passphrase using your browser’s built-in encryption. | 16 | pass |
@@ -85,6 +85,17 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | StepDown Card keeps the dates, dose wording, and clinician instructions you enter. | 12 | pass; `transcription-only` |
 
 No sentence exceeds 22 words. No sentence uses a banned marketing word. The first screen says the job, audience, first action, result, privacy, offline behavior, and price in one breath-sized view at 390 px.
+
+## Changed route copy
+
+| Route | Sentence or phrase | Words | Result |
+| --- | --- | ---: | --- |
+| `/demo` | Prednisone — sample | 2 | pass; clearly labelled realistic sample |
+| `/demo` | Sample only. | 2 | pass |
+| `/demo` | Follow your clinician’s written directions. | 5 | pass |
+| `/demo` | Take the listed dose with breakfast. | 7 | pass |
+| `/privacy` | Clear this site’s data to remove a saved card. | 9 | pass; `clear-device-data` |
+| encrypted recovery | A backup replaces this locked card only when required fields and dates are valid and dose steps do not overlap. | 19 | pass; `backup-validation` |
 
 ## Terminology
 

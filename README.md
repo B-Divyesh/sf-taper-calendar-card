@@ -4,7 +4,7 @@ StepDown Card is a private card that works after you first open it. It is for pe
 
 It does not calculate doses, recommend doses, or check interactions. Ask a clinician or pharmacist when instructions are unclear.
 
-## Run it
+## Run StepDown Card locally
 
 ```bash
 npm install
@@ -27,7 +27,7 @@ Deploy the generated `dist/` folder as a static site. The app saves the files it
 
 ## Data and privacy
 
-Cards stay in browser storage on the current device. You can print a card or export CSV for the day-by-day log. You can export a full JSON backup and import it later. You can optionally encrypt a real card with a passphrase using your browser’s built-in encryption. Save a backup because a forgotten passphrase cannot be recovered. See `/privacy` and `/terms` in the app.
+Cards stay in this browser on the current device. You can print a card or export CSV for the day-by-day log. You can export a full JSON backup and import it later. You can optionally encrypt a real card with a passphrase using your browser’s built-in encryption. Save a backup because a forgotten passphrase cannot be recovered. See `/privacy` and `/terms` in the app.
 
 ## Scope and cost
 

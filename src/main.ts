@@ -17,8 +17,8 @@ let updateReady = false;
 function sample(): Schedule {
   const today = localDate();
   return {
-    id: crypto.randomUUID(), medication: 'Example medication',
-    clinicianText: 'Example only. Follow the clinician-provided instructions for your own medication. Take the stated dose with breakfast. Contact your clinician or pharmacist with questions.',
+    id: crypto.randomUUID(), medication: 'Prednisone — sample',
+    clinicianText: 'Sample only. Follow your clinician’s written directions. Take the listed dose with breakfast.',
     createdAt: new Date().toISOString(), acknowledgements: {}, steps: [
       { id: crypto.randomUUID(), start: today, end: addDays(today, 4), dose: '20 mg once daily', instructions: 'Take with breakfast.' },
       { id: crypto.randomUUID(), start: addDays(today, 5), end: addDays(today, 9), dose: '10 mg once daily', instructions: 'Take with breakfast.' },
@@ -151,11 +151,11 @@ function header() {
 }
 
 function footer() {
-  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.2.0<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
+  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.3.0<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
 }
 
 function landing() {
-  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">PRIVATE TAPER TRANSCRIPTION</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><button class="primary" id="try-demo">Try it with sample data</button><span>Loads an example card. Nothing is saved.</span><button class="quiet" id="start-real">Write my card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
+  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">COPY YOUR CLINICIAN’S TAPER</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><button class="primary" id="try-demo">Try it with sample data</button><span>Loads an example card. Nothing is saved.</span><button class="quiet" id="start-real">Write my card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
   <section class="how" aria-labelledby="how-title"><h2 id="how-title">Make a card in three steps</h2><ol><li><b>Copy</b> the clinician’s instructions exactly.</li><li><b>Mark</b> each dose step and date.</li><li><b>Check</b> each day, then print or export.</li></ol></section>
   <section class="limits" aria-labelledby="limits-title"><h2 id="limits-title">What this card does not do</h2><p>It records clinician instructions. It does not calculate doses, recommend doses, or check interactions.</p><p>If instructions are unclear, contact your clinician or pharmacist.</p></section>`;
 }
@@ -178,7 +178,14 @@ function stepRow(step: Step) {
 function card(current: Schedule) {
   const all = datesFor(current.steps);
   const completed = all.filter(({ date }) => current.acknowledgements[date]).length;
-  return `<section class="card" id="schedule" aria-labelledby="page-title"><div class="card-head"><div><p class="eyebrow">${demo ? 'DEMO CARD' : 'SCHEDULE CARD'}</p><h1 id="page-title" tabindex="-1">${esc(current.medication)}</h1><p>${all.length} scheduled days · ${completed} checked</p></div><div class="toolbar"><button class="quiet" id="edit">Edit card</button><button class="quiet" id="export-csv">Export CSV</button><button class="quiet" id="export-json">Export backup</button><button class="primary" id="print">Print card</button></div></div><div class="safety"><strong>Follow the clinician’s directions.</strong> This card records them. It does not change them.</div><article class="instructions"><h2>Clinician instructions</h2><p>${esc(current.clinicianText).replaceAll('\n', '<br>')}</p></article><section class="tracks" aria-labelledby="days-title"><h2 id="days-title">Daily checks</h2>${all.map(({ date, step }, index) => dayRow(date, step, index)).join('')}</section><section class="ownership"><h2>Keep a copy you control</h2><p>Export a backup before changing devices. Checks include the local time you marked each day.</p>${importControl()}${!demo ? `<div class="encrypt"><h3>Encrypt this card on this device</h3><p>Set a passphrase to lock this card. Keep an exported backup.</p><p>A forgotten passphrase cannot be recovered.</p><label>New passphrase<input id="encrypt-pass" type="password" autocomplete="new-password"></label><button class="quiet" id="encrypt">Encrypt this card</button></div>` : ''}</section></section>`;
+  const heading = `<div><p class="eyebrow">${demo ? 'DEMO CARD' : 'SCHEDULE CARD'}</p><h1 id="page-title" tabindex="-1">${esc(current.medication)}</h1><p>${all.length} scheduled days · ${completed} checked</p></div>`;
+  const toolbar = `<div class="toolbar"><button class="quiet" id="edit">Edit card</button><button class="quiet" id="export-csv">Export CSV</button><button class="quiet" id="export-json">Export backup</button><button class="primary" id="print">Print card</button></div>`;
+  const safety = `<div class="safety"><strong>Follow the clinician’s directions.</strong> ${demo ? 'This sample' : 'This card'} records them. It does not change them.</div>`;
+  const instructions = `<article class="instructions"><h2>Clinician instructions</h2><p>${esc(current.clinicianText).replaceAll('\n', '<br>')}</p></article>`;
+  const tracks = `<section class="tracks" aria-labelledby="days-title"><h2 id="days-title">Daily checks</h2>${all.map(({ date, step }, index) => dayRow(date, step, index)).join('')}</section>`;
+  const ownership = `<section class="ownership"><h2>Keep a copy you control</h2><p>Export a backup before changing devices. Checks include the local time you marked each day.</p>${importControl()}${!demo ? `<div class="encrypt"><h3>Encrypt this card on this device</h3><p>Set a passphrase to lock this card. Keep an exported backup.</p><p>A forgotten passphrase cannot be recovered.</p><label>New passphrase<input id="encrypt-pass" type="password" autocomplete="new-password"></label><button class="quiet" id="encrypt">Encrypt this card</button></div>` : ''}</section>`;
+  if (demo) return `<section class="card demo-card" id="schedule" aria-labelledby="page-title"><div class="card-head">${heading}</div>${safety}${tracks}<section class="demo-tools"><h2>Sample card tools</h2>${toolbar}</section>${instructions}${ownership}</section>`;
+  return `<section class="card" id="schedule" aria-labelledby="page-title"><div class="card-head">${heading}${toolbar}</div>${safety}${instructions}${tracks}${ownership}</section>`;
 }
 
 function dayRow(date: string, step: Step, index: number) {
@@ -188,7 +195,7 @@ function dayRow(date: string, step: Step, index: number) {
 }
 
 function lockedScreen() {
-  return `<section class="editor"><p class="eyebrow">ENCRYPTED CARD</p><h1 id="page-title" tabindex="-1">Open your encrypted card</h1><p>Your schedule is encrypted in this browser. Enter the passphrase you set on this device.</p><label>Passphrase<input id="unlock-pass" type="password" autocomplete="current-password"></label><div class="actions"><button class="primary" id="unlock">Open this card</button></div><p class="safety">A forgotten passphrase cannot be recovered. Restore an exported backup instead.</p><section class="recovery"><h2>Restore a backup</h2><p>This replaces the locked card only after the backup passes every safety check.</p>${importControl()}</section></section>`;
+  return `<section class="editor"><p class="eyebrow">ENCRYPTED CARD</p><h1 id="page-title" tabindex="-1">Open your encrypted card</h1><p>Your schedule is encrypted in this browser. Enter the passphrase you set on this device.</p><label>Passphrase<input id="unlock-pass" type="password" autocomplete="current-password"></label><div class="actions"><button class="primary" id="unlock">Open this card</button></div><p class="safety">A forgotten passphrase cannot be recovered. Restore an exported backup instead.</p><section class="recovery"><h2>Restore a backup</h2><p>A backup replaces this locked card only when required fields and dates are valid and dose steps do not overlap.</p>${importControl()}</section></section>`;
 }
 
 function appScreen() {
@@ -199,7 +206,7 @@ function appScreen() {
 }
 
 function privacy() {
-  return `<article class="legal"><h1 tabindex="-1">Privacy for StepDown Card</h1><p>Schedule data stays in this browser unless you export it. The app has no account and no analytics.</p><h2>Data on this device</h2><p>Your card, dose steps, and checks use browser storage.</p><p>Clear site data or use a private browser session to remove them.</p><h2>Demo data</h2><p>The demo stays in memory and is discarded when you leave or reload it.</p></article>`;
+  return `<article class="legal"><h1 tabindex="-1">Privacy for StepDown Card</h1><p>Schedule data stays in this browser unless you export it. The app has no account and no analytics.</p><h2>Data on this device</h2><p>Your card, dose steps, and checks stay in this browser.</p><p>Clear this site’s data to remove a saved card.</p><h2>Demo data</h2><p>The demo stays in memory and is discarded when you leave or reload it.</p></article>`;
 }
 
 function terms() {

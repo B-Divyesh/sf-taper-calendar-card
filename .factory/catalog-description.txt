@@ -1,1 +1,1 @@
-Track a clinician-provided taper day by day in a private card that works offline.
+Track a clinician-provided taper in a private card that works after you first open it.
