@@ -1,6 +1,6 @@
 # Copy audit
 
-Audited 2026-08-28 after polish round 2. Word counts treat a hyphenated term, URL, version, or control name as one word.
+Audited 2026-08-28 after polish round 3. Word counts treat a hyphenated term, URL, version, or control name as one word.
 
 ## Landing `/`
 
@@ -57,7 +57,7 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | A private card for a clinician-provided taper. | 7 | pass |
 | Terms | 1 | pass |
 | Built by Param Factory | 4 | pass |
-| v1.3.0 | 1 | pass |
+| v1.4.0 | 1 | pass |
 | Original generated collage; provenance is in the design notes. | 9 | pass |
 
 ## README

@@ -18,18 +18,31 @@ async function createCard(page: Page, options: { start?: string; end?: string; d
 }
 
 async function waitForEncryptedCard(page: Page) {
-  await page.waitForFunction(async () => {
+  await expect.poll(async () => {
+    const stored = await storedCardState(page);
+    const record = typeof stored.card === 'string' ? JSON.parse(stored.card) : null;
+    return record?.kind === 'sealed' && stored.legacySealed === undefined && stored.legacyPlain === undefined;
+  }).toBe(true);
+}
+
+async function storedCardState(page: Page) {
+  return page.evaluate(async () => {
     const request = indexedDB.open('stepdown-card', 1);
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    return new Promise<boolean>(resolve => {
+    return new Promise<{ card?: string; legacySealed?: string; legacyPlain?: string }>((resolve, reject) => {
       const transaction = db.transaction('cards');
       const cards = transaction.objectStore('cards');
-      const sealed = cards.get('stepdown:real:sealed');
-      const plain = cards.get('stepdown:real:schedule');
-      transaction.oncomplete = () => resolve(Boolean(sealed.result) && plain.result === undefined);
+      const card = cards.get('stepdown:real:card');
+      const legacySealed = cards.get('stepdown:real:sealed');
+      const legacyPlain = cards.get('stepdown:real:schedule');
+      transaction.oncomplete = () => {
+        db.close();
+        resolve({ card: card.result, legacySealed: legacySealed.result, legacyPlain: legacyPlain.result });
+      };
+      transaction.onerror = () => reject(transaction.error);
     });
   });
 }
@@ -218,28 +231,52 @@ test('@claim:backup-validation rejects every named invalid backup and preserves 
   const errors: Error[] = [];
   page.on('pageerror', error => errors.push(error));
   await createCard(page);
+  const plainBeforeEncryption = await storedCardState(page);
+  const plainRecord = JSON.parse(plainBeforeEncryption.card!);
   await page.getByLabel('New passphrase').fill('preserve locked card');
   await page.getByRole('button', { name: 'Encrypt this card' }).click();
+  await page.locator('#import-json').setInputFiles({
+    name: 'missing-field-during-encryption.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...plainRecord.schedule, medication: undefined }))
+  });
+  await expect(page.getByText('Your current card was not changed.')).toBeVisible();
   await waitForEncryptedCard(page);
-  await page.reload();
-  const sealedBefore = await page.evaluate(async () => {
+  const encryptedBeforeMigration = await storedCardState(page);
+  const encryptedRecord = JSON.parse(encryptedBeforeMigration.card!);
+  expect(encryptedRecord.kind).toBe('sealed');
+  expect(encryptedBeforeMigration.legacySealed).toBeUndefined();
+  expect(encryptedBeforeMigration.legacyPlain).toBeUndefined();
+  // Recreate the reported legacy conflict. Reload must atomically prefer the
+  // sealed bytes, migrate them to the single record, and delete plaintext.
+  await page.evaluate(async ({ sealedPayload, plainSchedule }) => {
     const request = indexedDB.open('stepdown-card', 1);
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    return new Promise<string>((resolve, reject) => {
-      const get = db.transaction('cards').objectStore('cards').get('stepdown:real:sealed');
-      get.onsuccess = () => resolve(get.result);
-      get.onerror = () => reject(get.error);
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      cards.delete('stepdown:real:card');
+      cards.put(sealedPayload, 'stepdown:real:sealed');
+      cards.put(JSON.stringify(plainSchedule), 'stepdown:real:schedule');
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => reject(transaction.error);
     });
-  });
+  }, { sealedPayload: encryptedRecord.payload, plainSchedule: plainRecord.schedule });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
+  const sealedBefore = await storedCardState(page);
+  expect(JSON.parse(sealedBefore.card!)).toEqual(encryptedRecord);
+  expect(sealedBefore.legacySealed).toBeUndefined();
+  expect(sealedBefore.legacyPlain).toBeUndefined();
   const base = {
     id: 'candidate', medication: 'Candidate', clinicianText: 'Directions', createdAt: new Date().toISOString(),
     acknowledgements: {}, steps: [{ id: 'one', start: '2026-01-01', end: '2026-01-02', dose: '5 mg', instructions: '' }]
   };
   const invalidBackups = [
-    { name: 'missing-field', value: { ...base, medication: undefined } },
+    ...Array.from({ length: 25 }, (_, index) => ({ name: `missing-field-stress-${index + 1}`, value: { ...base, medication: undefined } })),
     { name: 'invalid-date', value: { ...base, steps: [{ ...base.steps[0], start: 'not-a-date' }] } },
     { name: 'reversed-range', value: { ...base, steps: [{ ...base.steps[0], start: '2026-01-03', end: '2026-01-01' }] } },
     { name: 'overlap', value: { ...base, steps: [base.steps[0], { ...base.steps[0], id: 'two', start: '2026-01-02', end: '2026-01-03' }] } }
@@ -248,23 +285,10 @@ test('@claim:backup-validation rejects every named invalid backup and preserves 
     await test.step(backup.name, async () => {
       await page.locator('#import-json').setInputFiles({ name: `${backup.name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup.value)) });
       await expect(page.getByText('Your current card was not changed.')).toBeVisible();
-      const storedAfter = await page.evaluate(async () => {
-        const request = indexedDB.open('stepdown-card', 1);
-        const db = await new Promise<IDBDatabase>((resolve, reject) => {
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        });
-        return new Promise<{ sealed?: string; plain?: string }>((resolve, reject) => {
-          const transaction = db.transaction('cards');
-          const cards = transaction.objectStore('cards');
-          const sealed = cards.get('stepdown:real:sealed');
-          const plain = cards.get('stepdown:real:schedule');
-          transaction.oncomplete = () => resolve({ sealed: sealed.result, plain: plain.result });
-          transaction.onerror = () => reject(transaction.error);
-        });
-      });
-      expect(storedAfter.sealed).toBe(sealedBefore);
-      expect(storedAfter.plain).toBeUndefined();
+      const storedAfter = await storedCardState(page);
+      expect(storedAfter.card).toBe(sealedBefore.card);
+      expect(storedAfter.legacySealed).toBeUndefined();
+      expect(storedAfter.legacyPlain).toBeUndefined();
       await page.reload();
       await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
     });
@@ -394,7 +418,7 @@ test('the standalone 404 has complete navigation, metadata, legal links, and a w
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveCount(1);
-  await expect(page.getByText(/Built by Param Factory · v1\.3\.0/)).toBeVisible();
+  await expect(page.getByText(/Built by Param Factory · v1\.4\.0/)).toBeVisible();
   const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href).filter(href => !href.includes('#main')));
   for (const href of new Set(hrefs)) expect((await request.get(href)).ok(), href).toBe(true);
   await page.keyboard.press('Tab');

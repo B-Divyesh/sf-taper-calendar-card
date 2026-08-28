@@ -4,10 +4,15 @@ import { addDays, csvFor, datesFor, localDate, parseSchedule, validateSchedule, 
 const REAL_KEY = 'stepdown:real:schedule';
 const DEMO_KEY = 'demo:stepdown:schedule';
 const SEALED_KEY = 'stepdown:real:sealed';
+const CARD_KEY = 'stepdown:real:card';
 const KNOWN_ROUTES = new Set(['/', '/demo', '/privacy', '/terms']);
 // Bump this with any release that changes persisted-card behavior. It gives
 // immutable app assets a new name while the service worker retires its cache.
-const BUILD_ID = '2026-08-28.2';
+const BUILD_ID = '2026-08-28.3';
+
+type StoredCard =
+  | { version: 1; kind: 'plain'; schedule: Schedule }
+  | { version: 1; kind: 'sealed'; payload: string };
 
 let demo = location.pathname === '/demo' || new URLSearchParams(location.search).get('demo') === '1';
 let schedule: Schedule | null = null;
@@ -48,33 +53,84 @@ function store() {
   });
 }
 
-async function readStored(key: string) {
+function parseStoredCard(value: unknown): StoredCard | null {
+  if (typeof value !== 'string') return null;
+  const candidate = JSON.parse(value) as Record<string, unknown>;
+  if (candidate.version !== 1) return null;
+  if (candidate.kind === 'sealed' && typeof candidate.payload === 'string') {
+    return { version: 1, kind: 'sealed', payload: candidate.payload };
+  }
+  if (candidate.kind === 'plain') {
+    const schedule = parseSchedule(candidate.schedule);
+    return schedule ? { version: 1, kind: 'plain', schedule } : null;
+  }
+  return null;
+}
+
+// A card has one authoritative record. This transaction also migrates the
+// former two-key format, always preferring an encrypted record and removing
+// any legacy plaintext before it commits.
+async function readStoredCard() {
   return inStorageQueue(async () => {
     const db = await store();
-    return new Promise<string | undefined>((resolve, reject) => {
-      const request = db.transaction('cards').objectStore('cards').get(key);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+    return new Promise<StoredCard | null>((resolve, reject) => {
+      const transaction = db.transaction('cards', 'readwrite');
+      const cards = transaction.objectStore('cards');
+      const current = cards.get(CARD_KEY);
+      const legacySealed = cards.get(SEALED_KEY);
+      const legacyPlain = cards.get(REAL_KEY);
+      let remaining = 3;
+      let result: StoredCard | null = null;
+      let failed: Error | null = null;
+      const normalize = () => {
+        remaining -= 1;
+        if (remaining || failed) return;
+        try {
+          if (current.result !== undefined) {
+            result = parseStoredCard(current.result);
+            if (!result) throw Error('Stored card is invalid');
+          } else if (legacySealed.result !== undefined) {
+            if (typeof legacySealed.result !== 'string') throw Error('Encrypted card is invalid');
+            result = { version: 1, kind: 'sealed', payload: legacySealed.result };
+          } else if (legacyPlain.result !== undefined) {
+            if (typeof legacyPlain.result !== 'string') throw Error('Stored card is invalid');
+            const parsed = parseSchedule(JSON.parse(legacyPlain.result));
+            if (!parsed) throw Error('Stored card is invalid');
+            result = { version: 1, kind: 'plain', schedule: parsed };
+          }
+          if (result) cards.put(JSON.stringify(result), CARD_KEY);
+          cards.delete(SEALED_KEY);
+          cards.delete(REAL_KEY);
+        } catch (error) {
+          failed = error instanceof Error ? error : Error('Stored card is invalid');
+          transaction.abort();
+        }
+      };
+      current.onsuccess = normalize;
+      legacySealed.onsuccess = normalize;
+      legacyPlain.onsuccess = normalize;
+      transaction.oncomplete = () => { db.close(); resolve(result); };
+      transaction.onabort = () => { db.close(); reject(failed || transaction.error); };
+      transaction.onerror = () => undefined;
     });
   });
 }
 
-async function writeStored(key: string, value: string) {
-  return inStorageQueue(async () => {
-    const db = await store();
-    return new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('cards', 'readwrite');
-      const cards = transaction.objectStore('cards');
-      if (key === REAL_KEY) {
-        const sealed = cards.get(SEALED_KEY);
-        sealed.onsuccess = () => {
-          if (sealed.result === undefined) cards.put(value, key);
-        };
-      } else cards.put(value, key);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
+async function writeStoredCardTransaction(record: StoredCard) {
+  const db = await store();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction('cards', 'readwrite');
+    const cards = transaction.objectStore('cards');
+    cards.put(JSON.stringify(record), CARD_KEY);
+    cards.delete(SEALED_KEY);
+    cards.delete(REAL_KEY);
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
   });
+}
+
+async function writeStoredCard(record: StoredCard) {
+  return inStorageQueue(() => writeStoredCardTransaction(record));
 }
 
 async function removeStored(key: string) {
@@ -83,52 +139,26 @@ async function removeStored(key: string) {
     return new Promise<void>((resolve, reject) => {
       const transaction = db.transaction('cards', 'readwrite');
       transaction.objectStore('cards').delete(key);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
     });
   });
 }
 
-// A sealed record is the authority while a card is locked.  Keep this cleanup
-// in one committed transaction so a rejected import cannot expose a stale
-// plaintext record, even briefly.
+// Rejected imports do not write. Before reporting the rejection, normalize
+// storage in one committed transaction and confirm the sole record is sealed.
 async function keepEncryptedCardLocked() {
-  return inStorageQueue(async () => {
-    const db = await store();
-    return new Promise<boolean>((resolve, reject) => {
-      const transaction = db.transaction('cards', 'readwrite');
-      const cards = transaction.objectStore('cards');
-      const sealed = cards.get(SEALED_KEY);
-      let hasSealedRecord = false;
-      sealed.onsuccess = () => {
-        hasSealedRecord = sealed.result !== undefined;
-        if (hasSealedRecord) cards.delete(REAL_KEY);
-      };
-      sealed.onerror = () => reject(sealed.error);
-      transaction.oncomplete = () => resolve(hasSealedRecord);
-      transaction.onerror = () => reject(transaction.error);
-    });
-  });
+  return (await readStoredCard())?.kind === 'sealed';
 }
 
 async function replaceReal(next: Schedule) {
-  await inStorageQueue(async () => {
-    const db = await store();
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('cards', 'readwrite');
-      const cards = transaction.objectStore('cards');
-      cards.put(JSON.stringify(next), REAL_KEY);
-      cards.delete(SEALED_KEY);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
-  });
+  await writeStoredCard({ version: 1, kind: 'plain', schedule: next });
 }
 
 async function save() {
   if (!schedule || demo) return;
   if (encryptionPassphrase) await seal(schedule, encryptionPassphrase);
-  else await writeStored(REAL_KEY, JSON.stringify(schedule));
+  else await writeStoredCard({ version: 1, kind: 'plain', schedule });
 }
 
 function b64(bytes: Uint8Array) { return btoa(String.fromCharCode(...bytes)); }
@@ -138,26 +168,21 @@ async function cryptKey(passphrase: string, salt: Uint8Array) {
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 async function seal(value: Schedule, passphrase: string) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await cryptKey(passphrase, salt);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(JSON.stringify(value)));
+  // Reserve the queue before key derivation. An import or check started while
+  // encryption is running cannot overtake the final encrypted commit.
   await inStorageQueue(async () => {
-    const db = await store();
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('cards', 'readwrite');
-      const cards = transaction.objectStore('cards');
-      cards.put(JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) }), SEALED_KEY);
-      cards.delete(REAL_KEY);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await cryptKey(passphrase, salt);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(JSON.stringify(value)));
+    const payload = JSON.stringify({ salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(encrypted)) });
+    await writeStoredCardTransaction({ version: 1, kind: 'sealed', payload });
   });
 }
 async function unseal(passphrase: string) {
-  const item = await readStored(SEALED_KEY);
-  if (!item) throw Error('Missing encrypted card');
-  const payload = JSON.parse(item) as { salt: string; iv: string; data: string };
+  const item = await readStoredCard();
+  if (!item || item.kind !== 'sealed') throw Error('Missing encrypted card');
+  const payload = JSON.parse(item.payload) as { salt: string; iv: string; data: string };
   const key = await cryptKey(passphrase, unb64(payload.salt));
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(payload.iv).buffer as ArrayBuffer }, key, unb64(payload.data).buffer as ArrayBuffer);
   const parsed = parseSchedule(JSON.parse(new TextDecoder().decode(decrypted)));
@@ -210,7 +235,7 @@ function header() {
 }
 
 function footer() {
-  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.3.0 · build ${BUILD_ID}<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
+  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.4.0 · build ${BUILD_ID}<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
 }
 
 function landing() {
@@ -320,15 +345,11 @@ async function importBackup(file: File) {
 }
 
 async function loadReal() {
-  const sealed = await readStored(SEALED_KEY);
-  locked = Boolean(sealed);
+  const stored = await readStoredCard();
+  locked = stored?.kind === 'sealed';
   encryptionPassphrase = null;
   if (locked) { schedule = null; return; }
-  const saved = await readStored(REAL_KEY);
-  if (!saved) { schedule = null; return; }
-  const parsed = parseSchedule(JSON.parse(saved));
-  if (!parsed) throw Error('Stored card is invalid');
-  schedule = parsed;
+  schedule = stored?.kind === 'plain' ? stored.schedule : null;
 }
 
 async function navigate(url: string, replace = false) {
