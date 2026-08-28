@@ -1,0 +1,14 @@
+{
+  "url": "https://taper-calendar-card.sociobot.in",
+  "loadMs": 577,
+  "errors": [],
+  "a11y": {
+    "title": "StepDown Card — track a taper day by day",
+    "lang": "en",
+    "h1": 1,
+    "main": true,
+    "imgsMissingAlt": 0,
+    "buttonsUnlabeled": 0,
+    "textLength": 1354
+  }
+}
