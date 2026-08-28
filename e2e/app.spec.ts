@@ -15,6 +15,23 @@ async function createCard(page: Page, options: { start?: string; end?: string; d
   await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
 }
 
+async function waitForEncryptedCard(page: Page) {
+  await page.waitForFunction(async () => {
+    const request = indexedDB.open('stepdown-card', 1);
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return new Promise<boolean>(resolve => {
+      const transaction = db.transaction('cards');
+      const cards = transaction.objectStore('cards');
+      const sealed = cards.get('stepdown:real:sealed');
+      const plain = cards.get('stepdown:real:schedule');
+      transaction.oncomplete = () => resolve(Boolean(sealed.result) && plain.result === undefined);
+    });
+  });
+}
+
 test('@claim:csv-export exports one log row per scheduled day', async ({ page }) => {
   await page.goto('/demo');
   const rows = await page.locator('.day').count();
@@ -69,6 +86,7 @@ test('@claim:encrypted-card locks and restores a card with its passphrase', asyn
   await page.getByLabel('New passphrase').fill('correct horse battery');
   await page.getByRole('button', { name: 'Encrypt this card' }).click();
   await expect(page.getByText('This card is encrypted.')).toBeVisible();
+  await waitForEncryptedCard(page);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
   await page.getByLabel('Passphrase').fill('wrong passphrase');
@@ -78,6 +96,23 @@ test('@claim:encrypted-card locks and restores a card with its passphrase', asyn
   await page.getByLabel('Passphrase').fill('correct horse battery');
   await page.getByRole('button', { name: 'Open this card' }).click();
   await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
+});
+
+test('@claim:no-passphrase-recovery leaves a card locked without the original passphrase', async ({ page }) => {
+  await createCard(page);
+  await page.getByLabel('New passphrase').fill('only original passphrase');
+  await page.getByRole('button', { name: 'Encrypt this card' }).click();
+  await expect(page.getByText('This card is encrypted.')).toBeVisible();
+  await waitForEncryptedCard(page);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
+  await page.getByLabel('Passphrase', { exact: true }).fill('different passphrase');
+  await page.getByRole('button', { name: 'Open this card' }).click();
+  await expect(page.getByRole('heading', { name: 'Open your encrypted card' })).toBeVisible();
+  await expect(page.getByText('A forgotten passphrase cannot be recovered.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /reset|recover/i })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /reset|recover/i })).toHaveCount(0);
+  await expect(page.getByLabel('Import a backup')).toBeAttached();
 });
 
 test('@claim:demo-unsaved discards demo changes and never writes a demo record', async ({ page }) => {
@@ -123,6 +158,22 @@ test('@claim:transcription-only keeps the entered dose and dates unchanged', asy
   await expect(page.locator('time').first()).toHaveAttribute('datetime', '2026-12-31');
   await expect(page.locator('time').last()).toHaveAttribute('datetime', '2027-01-02');
   await expect(page.getByText('7.5 mg exactly')).toHaveCount(3);
+  await expect(page.getByText('Take exactly as written by Dr. Rivera.')).toBeVisible();
+});
+
+test('@claim:no-clinical-output offers no dose recommendation or interaction checker', async ({ page }) => {
+  const outsideRequests: string[] = [];
+  page.on('request', request => {
+    if (!request.url().startsWith('http://127.0.0.1:4173')) outsideRequests.push(request.url());
+  });
+  await page.goto('/');
+  await expect(page.getByText('It does not calculate doses, recommend doses, or check interactions.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /calculate|recommend|interaction/i })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /calculate|recommend|interaction/i })).toHaveCount(0);
+  await createCard(page, { start: '2026-08-28', end: '2026-08-28', dose: '7 mg copied exactly' });
+  await expect(page.getByText('7 mg copied exactly')).toHaveCount(1);
+  await expect(page.getByText(/recommended dose|interaction result/i)).toHaveCount(0);
+  expect(outsideRequests).toEqual([]);
 });
 
 test('@claim:clear-device-data removes the saved card', async ({ page }) => {
@@ -227,13 +278,31 @@ test('client navigation enters demo, restores real data, focuses headings, and u
   await expect(page).toHaveURL(/\/demo$/);
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Example medication' })).toBeFocused();
-  await page.getByRole('button', { name: 'Start for real' }).click();
-  await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
+  await page.getByRole('button', { name: 'Leave demo and write a card' }).click();
+  await expect(page.getByLabel('Medication or treatment name')).toHaveValue('Prednisone');
+  await expect(page.getByLabel('Medication or treatment name')).toBeFocused();
   await page.getByRole('link', { name: 'Privacy' }).first().click();
   await expect(page.getByRole('heading', { name: 'Privacy for StepDown Card' })).toBeFocused();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://taper-calendar-card.sociobot.in/privacy');
   await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Edit your taper card' })).toBeFocused();
+  await expect(page.getByLabel('Medication or treatment name')).toHaveValue('Prednisone');
+});
+
+test('the query demo path is isolated, resettable, and returns to real data', async ({ page }) => {
+  await createCard(page);
+  await page.goto('/?demo=1');
+  await expect(page).toHaveTitle('Demo — StepDown Card');
+  await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Example medication' })).toBeVisible();
+  await page.getByRole('button', { name: 'Check this day' }).first().click();
+  await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Reset demo' }).click();
+  await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Leave demo and write a card' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel('Medication or treatment name')).toHaveValue('Prednisone');
+  await expect(page.getByLabel('Medication or treatment name')).toBeFocused();
 });
 
 test('unknown client paths render the designed not-found screen and known legal links work', async ({ page }) => {
@@ -244,6 +313,49 @@ test('unknown client paths render the designed not-found screen and known legal 
   await expect(page.getByRole('heading', { name: 'This page is not on the card' })).toBeVisible();
 });
 
+test('every app route has its own title, metadata, one heading, and focus after navigation', async ({ page }) => {
+  const routes = [
+    ['/', 'StepDown Card — track a taper day by day', 'https://taper-calendar-card.sociobot.in/'],
+    ['/demo', 'Demo — StepDown Card', 'https://taper-calendar-card.sociobot.in/demo'],
+    ['/privacy', 'Privacy — StepDown Card', 'https://taper-calendar-card.sociobot.in/privacy'],
+    ['/terms', 'Terms — StepDown Card', 'https://taper-calendar-card.sociobot.in/terms']
+  ];
+  for (const [route, title, canonical] of routes) {
+    await page.goto(route);
+    await expect(page).toHaveTitle(title);
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.locator('main')).toHaveCount(1);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /.+/);
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', canonical);
+    await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
+  }
+});
+
+test('the standalone 404 has complete navigation, metadata, legal links, and a working skip link', async ({ page, request }) => {
+  await page.goto('/404.html');
+  await expect(page).toHaveTitle('Page not found — StepDown Card');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /.+/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#1f6f5f');
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Page not found — StepDown Card');
+  await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', 'Page not found — StepDown Card');
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://taper-calendar-card.sociobot.in/404');
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon.svg');
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(2);
+  await expect(page.getByRole('link', { name: 'Terms' })).toHaveCount(1);
+  await expect(page.getByText(/Built by Param Factory · v1\.2\.0/)).toBeVisible();
+  const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href).filter(href => !href.includes('#main')));
+  for (const href of new Set(hrefs)) expect((await request.get(href)).ok(), href).toBe(true);
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to the message' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main')).toBeFocused();
+});
+
 test('the app announces an available service-worker update with a reload action', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'UPDATE_AVAILABLE' } })));
@@ -251,14 +363,14 @@ test('the app announces an available service-worker update with a reload action'
   await expect(page.getByRole('button', { name: 'Reload now' })).toBeVisible();
 });
 
-test('light and dark routes have no serious or critical axe violations', async ({ browser }) => {
+test('light and dark routes have no axe violations', async ({ browser }) => {
   for (const colorScheme of ['light', 'dark'] as const) {
     const context = await browser.newContext({ colorScheme });
     const page = await context.newPage();
-    for (const route of ['/', '/demo', '/privacy', '/terms']) {
+    for (const route of ['/', '/demo', '/privacy', '/terms', '/404.html']) {
       await page.goto(route);
       const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations.filter(item => ['serious', 'critical'].includes(item.impact || ''))).toEqual([]);
+      expect(results.violations).toEqual([]);
     }
     await context.close();
   }
@@ -276,6 +388,23 @@ test('keyboard users can skip to content, enter the demo, and toggle a day', asy
   await check.focus();
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(1);
+});
+
+test('the first screen is complete at 390px and Write my card focuses the editor', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto('/');
+  for (const text of [
+    'Track your taper day by day',
+    'For people following clinician instructions who need each dose and checked day in one private card.',
+    'Try it with sample data',
+    'Works after you first open it.',
+    'Stores your card on this device.',
+    'Free to use. No account or analytics.'
+  ]) await expect(page.getByText(text, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Write my card' }).click();
+  await expect(page.getByLabel('Medication or treatment name')).toBeFocused();
+  await context.close();
 });
 
 test('the real editor fits 390px and key mobile touch targets are at least 44px', async ({ browser }) => {

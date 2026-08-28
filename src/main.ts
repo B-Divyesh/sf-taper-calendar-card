@@ -118,10 +118,24 @@ function setMetadata() {
     '/privacy': 'Privacy — StepDown Card',
     '/terms': 'Terms — StepDown Card'
   };
+  const descriptions: Record<string, string> = {
+    '/': 'Write down a clinician-provided taper and check each day privately.',
+    '/demo': 'Try a private taper card with isolated sample data that is never saved.',
+    '/privacy': 'Learn what StepDown Card stores on this device and how to remove it.',
+    '/terms': 'Read the terms and clinical limits for using StepDown Card.'
+  };
   document.title = demo && route === '/' ? titles['/demo'] : titles[route] || 'Page not found — StepDown Card';
   const canonicalRoute = demo && route === '/' ? '/demo' : KNOWN_ROUTES.has(route) ? route : '/404';
-  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href = `https://taper-calendar-card.sociobot.in${canonicalRoute}`;
+  const metadataRoute = demo && route === '/' ? '/demo' : route;
+  const description = descriptions[metadataRoute] || 'Return to StepDown Card to write down a clinician-provided taper.';
+  const canonical = `https://taper-calendar-card.sociobot.in${canonicalRoute}`;
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href = canonical;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')!.content = description;
   document.querySelector<HTMLMetaElement>('meta[property="og:title"]')!.content = document.title;
+  document.querySelector<HTMLMetaElement>('meta[property="og:description"]')!.content = description;
+  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')!.content = canonical;
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')!.content = document.title;
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')!.content = description;
 }
 
 function app() {
@@ -137,13 +151,13 @@ function header() {
 }
 
 function footer() {
-  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.1.0<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
+  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.2.0<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
 }
 
 function landing() {
-  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">PRIVATE TAPER TRANSCRIPTION</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><button class="primary" id="try-demo">Try it with sample data</button><span>Loads an example card. Nothing is saved.</span><button class="quiet" id="start-real">Start your own card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
+  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">PRIVATE TAPER TRANSCRIPTION</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><button class="primary" id="try-demo">Try it with sample data</button><span>Loads an example card. Nothing is saved.</span><button class="quiet" id="start-real">Write my card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
   <section class="how" aria-labelledby="how-title"><h2 id="how-title">Make a card in three steps</h2><ol><li><b>Copy</b> the clinician’s instructions exactly.</li><li><b>Mark</b> each dose step and date.</li><li><b>Check</b> each day, then print or export.</li></ol></section>
-  <section class="limits" aria-labelledby="limits-title"><h2 id="limits-title">What this card does not do</h2><p>It does not calculate a taper, recommend a dose, check interactions, or replace your clinician.</p><p>If instructions are unclear, contact your clinician or pharmacist.</p></section>`;
+  <section class="limits" aria-labelledby="limits-title"><h2 id="limits-title">What this card does not do</h2><p>It records clinician instructions. It does not calculate doses, recommend doses, or check interactions.</p><p>If instructions are unclear, contact your clinician or pharmacist.</p></section>`;
 }
 
 function importControl() {
@@ -164,7 +178,7 @@ function stepRow(step: Step) {
 function card(current: Schedule) {
   const all = datesFor(current.steps);
   const completed = all.filter(({ date }) => current.acknowledgements[date]).length;
-  return `<section class="card" id="schedule" aria-labelledby="page-title"><div class="card-head"><div><p class="eyebrow">${demo ? 'DEMO CARD' : 'SCHEDULE CARD'}</p><h1 id="page-title" tabindex="-1">${esc(current.medication)}</h1><p>${all.length} scheduled days · ${completed} checked</p></div><div class="toolbar"><button class="quiet" id="edit">Edit card</button><button class="quiet" id="export-csv">Export CSV</button><button class="quiet" id="export-json">Export backup</button><button class="primary" id="print">Print card</button></div></div><aside class="safety"><strong>Follow the clinician’s directions.</strong> This card records them. It does not change them.</aside><article class="instructions"><h2>Clinician instructions</h2><p>${esc(current.clinicianText).replaceAll('\n', '<br>')}</p></article><section class="tracks" aria-labelledby="days-title"><h2 id="days-title">Daily checks</h2>${all.map(({ date, step }, index) => dayRow(date, step, index)).join('')}</section><section class="ownership"><h2>Keep a copy you control</h2><p>Export a backup before changing devices. Checks include the local time you marked each day.</p>${importControl()}${!demo ? `<div class="encrypt"><h3>Encrypt this card on this device</h3><p>Set a passphrase to lock this card. Keep an exported backup.</p><p>A forgotten passphrase cannot be recovered.</p><label>New passphrase<input id="encrypt-pass" type="password" autocomplete="new-password"></label><button class="quiet" id="encrypt">Encrypt this card</button></div>` : ''}</section></section>`;
+  return `<section class="card" id="schedule" aria-labelledby="page-title"><div class="card-head"><div><p class="eyebrow">${demo ? 'DEMO CARD' : 'SCHEDULE CARD'}</p><h1 id="page-title" tabindex="-1">${esc(current.medication)}</h1><p>${all.length} scheduled days · ${completed} checked</p></div><div class="toolbar"><button class="quiet" id="edit">Edit card</button><button class="quiet" id="export-csv">Export CSV</button><button class="quiet" id="export-json">Export backup</button><button class="primary" id="print">Print card</button></div></div><div class="safety"><strong>Follow the clinician’s directions.</strong> This card records them. It does not change them.</div><article class="instructions"><h2>Clinician instructions</h2><p>${esc(current.clinicianText).replaceAll('\n', '<br>')}</p></article><section class="tracks" aria-labelledby="days-title"><h2 id="days-title">Daily checks</h2>${all.map(({ date, step }, index) => dayRow(date, step, index)).join('')}</section><section class="ownership"><h2>Keep a copy you control</h2><p>Export a backup before changing devices. Checks include the local time you marked each day.</p>${importControl()}${!demo ? `<div class="encrypt"><h3>Encrypt this card on this device</h3><p>Set a passphrase to lock this card. Keep an exported backup.</p><p>A forgotten passphrase cannot be recovered.</p><label>New passphrase<input id="encrypt-pass" type="password" autocomplete="new-password"></label><button class="quiet" id="encrypt">Encrypt this card</button></div>` : ''}</section></section>`;
 }
 
 function dayRow(date: string, step: Step, index: number) {
@@ -179,7 +193,7 @@ function lockedScreen() {
 
 function appScreen() {
   if (locked) return lockedScreen();
-  const banner = demo ? '<div class="demo"><b>Demo — sample data, nothing is saved</b><button id="reset-demo">Reset demo</button><button id="leave-demo">Start for real</button></div>' : '';
+  const banner = demo ? '<div class="demo"><b>Demo — sample data, nothing is saved</b><button id="reset-demo">Reset demo</button><button id="leave-demo">Leave demo and write a card</button></div>' : '';
   if (schedule) return `${banner}${editing ? editor(schedule, true) : card(schedule)}`;
   return `${banner}${landing()}${!demo ? editor(null) : ''}`;
 }
@@ -189,7 +203,7 @@ function privacy() {
 }
 
 function terms() {
-  return `<article class="legal"><h1 tabindex="-1">Terms for StepDown Card</h1><p>StepDown Card is a personal transcription tool. It is not medical advice or a medical device.</p><h2>Use the clinician’s directions</h2><p>Do not use this app to calculate, change, or choose a taper.</p><p>Ask your clinician or pharmacist when directions are unclear.</p><h2>Cost</h2><p>StepDown Card is free to use.</p></article>`;
+  return `<article class="legal"><h1 tabindex="-1">Terms for StepDown Card</h1><p>StepDown Card keeps the dates, dose wording, and clinician instructions you enter.</p><h2>Use the clinician’s directions</h2><p>It does not calculate doses, recommend doses, or check interactions.</p><p>Ask your clinician or pharmacist when directions are unclear.</p><h2>Cost</h2><p>StepDown Card is free to use.</p></article>`;
 }
 
 function notFound() {
@@ -278,9 +292,23 @@ function bind() {
     void navigate(link.pathname + link.search);
   }));
   document.querySelector('#try-demo')?.addEventListener('click', () => void navigate('/demo'));
-  document.querySelector('#start-real')?.addEventListener('click', () => document.querySelector('#schedule-form')?.scrollIntoView({ behavior: 'smooth' }));
+  document.querySelector('#start-real')?.addEventListener('click', () => {
+    document.querySelector('#schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+    document.querySelector<HTMLInputElement>('[name="medication"]')?.focus({ preventScroll: true });
+  });
   document.querySelector('#reset-demo')?.addEventListener('click', () => { schedule = sample(); notice = 'The example card was reset.'; app(); });
-  document.querySelector('#leave-demo')?.addEventListener('click', async () => { await removeStored(DEMO_KEY); await navigate('/'); });
+  document.querySelector('#leave-demo')?.addEventListener('click', async () => {
+    await removeStored(DEMO_KEY);
+    await navigate('/');
+    if (schedule) {
+      editing = true;
+      app();
+    }
+    requestAnimationFrame(() => {
+      document.querySelector('#schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+      document.querySelector<HTMLInputElement>('[name="medication"]')?.focus({ preventScroll: true });
+    });
+  });
   document.querySelector('#unlock')?.addEventListener('click', async () => {
     const passphrase = document.querySelector<HTMLInputElement>('#unlock-pass')!.value;
     try {

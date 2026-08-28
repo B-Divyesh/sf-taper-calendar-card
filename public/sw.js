@@ -1,5 +1,5 @@
-const CACHE = 'stepdown-v3';
-const SHELL = ['/', '/demo', '/privacy', '/terms', '/index.html', '/404.html', '/404.css', '/manifest.webmanifest', '/favicon.svg', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/hero.webp'].concat('__ASSETS__');
+const CACHE = 'stepdown-v4';
+const SHELL = ['/', '/demo', '/privacy', '/terms', '/index.html', '/404.html', '/404.css', '/404.js', '/manifest.webmanifest', '/favicon.svg', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/hero.webp', '/og.webp'].concat('__ASSETS__');
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
