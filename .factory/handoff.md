@@ -14,6 +14,7 @@ The cassette-era zine identity, static PWA architecture, original generated coll
 
 - Repair commit: `617b2b1895aeb1d70f4938168b815fe9ad1bba0f`.
 - Verification-hardening commit: `6d3073ffa61e101350e4437a447ecdce32bac898`.
+- Evidence bundle commit: `24fd5829e454c3e00dd1ccccf169472dd19a0212`.
 - Both commits were pushed to `origin/main`.
 - Azure Static Web Apps deployment ID: `556b2786-19c1-43b1-bff4-4fe82193c6f9`.
 - Deployed URL: `https://taper-calendar-card.sociobot.in`.
