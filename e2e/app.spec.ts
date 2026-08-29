@@ -412,12 +412,15 @@ test('unknown client paths render the designed not-found screen and known legal 
   await page.goto('/privacy');
   await page.getByRole('link', { name: 'Card', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.goto('/missing-page');
+  const response = await page.goto('/missing-page');
+  if (expectedOrigin.startsWith('https://')) expect(response?.status()).toBe(404);
+  await expect(page).toHaveTitle('Page not found — StepDown Card');
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   await expect(page.getByText('This address does not match a page. Return to your card or try the sample.')).toBeVisible();
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://taper-calendar-card.sociobot.in/404');
 });
 
-test('every app route has its own title, metadata, one heading, and focus after navigation', async ({ page }) => {
+test('every app route has its own title, metadata, one heading, and working links', async ({ page, request }) => {
   const routes = [
     ['/', 'StepDown Card — track a taper day by day', 'https://taper-calendar-card.sociobot.in/'],
     ['/demo', 'Demo — StepDown Card', 'https://taper-calendar-card.sociobot.in/demo'],
@@ -434,8 +437,13 @@ test('every app route has its own title, metadata, one heading, and focus after 
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', canonical);
     await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/icon-180.png');
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://taper-calendar-card.sociobot.in/og.webp');
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute('content', 'https://taper-calendar-card.sociobot.in/og.webp');
     await expect(page.getByText('The collage was generated for StepDown Card.')).toBeVisible();
     await expect(page.getByText(/provenance is in the design notes/i)).toHaveCount(0);
+    const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href).filter(href => !href.includes('#main')));
+    for (const href of new Set(hrefs)) expect((await request.get(href)).ok(), href).toBe(true);
   }
 });
 
@@ -454,6 +462,7 @@ test('the standalone 404 has complete navigation, metadata, legal links, and a w
   await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', 'Page not found — StepDown Card');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://taper-calendar-card.sociobot.in/404');
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon.svg');
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/icon-180.png');
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveCount(1);

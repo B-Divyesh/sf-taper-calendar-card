@@ -66,6 +66,7 @@ describe('release configuration', () => {
   it('does not intercept or cache cross-origin service-worker requests and removes old caches', () => {
     const worker = readFileSync('public/sw.js', 'utf8');
     expect(worker).toContain("url.origin !== self.location.origin");
+    expect(worker).toContain("const CACHE = 'stepdown-v8'");
     expect(worker).toContain('caches.delete(name)');
     expect(worker).not.toContain('api.sociobot.in');
     expect(worker).toContain("caches.match(url.pathname");
@@ -76,5 +77,13 @@ describe('release configuration', () => {
     expect(config.routes.find((route: { route: string }) => route.route === '/assets/*').headers['Cache-Control']).toContain('immutable');
     expect(config.navigationFallback).toBeUndefined();
     expect(config.responseOverrides['404'].statusCode).toBe(404);
+  });
+
+  it('ships a versioned standalone manifest with the required maskable icon sizes', () => {
+    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.start_url).toBe('/?v=5');
+    expect(manifest.icons.map((icon: { sizes: string }) => icon.sizes)).toEqual(['192x192', '512x512']);
+    expect(manifest.icons.every((icon: { purpose: string }) => icon.purpose.includes('maskable'))).toBe(true);
   });
 });
