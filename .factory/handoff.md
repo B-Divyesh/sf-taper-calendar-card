@@ -54,3 +54,9 @@ The exact per-claim commands are in `.factory/claims.json`. The complete finding
 ## Known gaps and next steps
 
 None. Every finding in reviews 1–5, every controller regression, and every original verification defect was rechecked against source, a clean clone, and the deployed site.
+
+## Independent verification 3 — PASS
+
+On 2026-08-29 UTC, candidate `bf328f442e94871701e38259496b289812cd0db1` was independently verified at `https://taper-calendar-card.sociobot.in` and **PASSED** release. A fresh `npm ci` install, all 14 exact claim commands, typecheck, lint, the full local test suite (13 unit / 31 Playwright), and the exact production build passed. The independent live suite also passed 31/31; live JS, CSS, HTML, service worker, and manifest matched the candidate build by SHA-256.
+
+The first screen communicates the job, intended user, and one-click “Try it with sample data” path. Desktop and 390 px mobile behavior, keyboard/focus, reduced motion, offline demo reload, service-worker update notice, same-origin-only traffic, headers/caching, and axe serious/critical checks passed. Fresh live Lighthouse was 92 performance / 100 accessibility / 100 best practices / 100 SEO (FCP 1.0 s, LCP 1.4 s, CLS 0). No critical, high, medium, or low defects remain. Full candidate-specific evidence is in `.factory/verification-3.md`.
