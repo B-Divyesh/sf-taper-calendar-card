@@ -52,6 +52,17 @@ describe('backup schema', () => {
 });
 
 describe('release configuration', () => {
+  it('gives every declared claim exactly one tagged browser test', () => {
+    const claims = JSON.parse(readFileSync('.factory/claims.json', 'utf8')) as Array<{ id: string; test: string }>;
+    const browserTests = readFileSync('e2e/app.spec.ts', 'utf8');
+    expect(new Set(claims.map(claim => claim.id)).size).toBe(claims.length);
+    for (const claim of claims) {
+      expect(claim.test).toBe(`npm test -- --grep @claim:${claim.id}`);
+      expect(browserTests.match(new RegExp(`@claim:${claim.id}(?![a-z0-9-])`, 'g'))).toHaveLength(1);
+    }
+    expect(browserTests.match(/@claim:[a-z0-9-]+/g)).toHaveLength(claims.length);
+  });
+
   it('does not intercept or cache cross-origin service-worker requests and removes old caches', () => {
     const worker = readFileSync('public/sw.js', 'utf8');
     expect(worker).toContain("url.origin !== self.location.origin");

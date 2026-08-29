@@ -8,7 +8,7 @@ const CARD_KEY = 'stepdown:real:card';
 const KNOWN_ROUTES = new Set(['/', '/demo', '/privacy', '/terms']);
 // Bump this with any release that changes persisted-card behavior. It gives
 // immutable app assets a new name while the service worker retires its cache.
-const BUILD_ID = '2026-08-28.3';
+const BUILD_ID = '2026-08-29.1';
 
 type StoredCard =
   | { version: 1; kind: 'plain'; schedule: Schedule }
@@ -98,7 +98,9 @@ async function readStoredCard() {
             if (!parsed) throw Error('Stored card is invalid');
             result = { version: 1, kind: 'plain', schedule: parsed };
           }
-          if (result) cards.put(JSON.stringify(result), CARD_KEY);
+          // A current record is already authoritative. Do not rewrite it on a
+          // read, so entering and leaving demo mode cannot alter its bytes.
+          if (result && current.result === undefined) cards.put(JSON.stringify(result), CARD_KEY);
           cards.delete(SEALED_KEY);
           cards.delete(REAL_KEY);
         } catch (error) {
@@ -235,11 +237,11 @@ function header() {
 }
 
 function footer() {
-  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.4.0 · build ${BUILD_ID}<br><small>Original generated collage; provenance is in the design notes.</small></p></footer>`;
+  return `<footer><p>A private card for a clinician-provided taper.</p><p><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · v1.5.0 · build ${BUILD_ID}<br><small>The collage was generated for StepDown Card.</small></p></footer>`;
 }
 
 function landing() {
-  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">COPY YOUR CLINICIAN’S TAPER</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><button class="primary" id="try-demo">Try it with sample data</button><span>Loads an example card. Nothing is saved.</span><button class="quiet" id="start-real">Write my card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
+  return `<section class="landing" aria-labelledby="page-title"><div class="hero-copy"><p class="eyebrow">COPY YOUR CLINICIAN’S TAPER</p><h1 id="page-title" tabindex="-1">Track your taper day by day</h1><p class="lede">For people following clinician instructions who need each dose and checked day in one private card.</p><div class="actions"><a class="primary" href="/?demo=1" data-route>Try it with sample data</a><span>Opens a filled sample card. Nothing is saved.</span><button class="quiet" id="start-real">Write my card</button></div><ul class="facts"><li>Works after you first open it.</li><li>Stores your card on this device.</li><li>Free to use. No account or analytics.</li></ul></div><figure class="hero-art"><img src="/hero.webp" width="768" height="512" alt="An opened cassette case with blank cards and a small calendar, representing a finite written schedule." fetchpriority="high"><figcaption>Keep the written plan visible.</figcaption></figure></section>
   <section class="how" aria-labelledby="how-title"><h2 id="how-title">Make a card in three steps</h2><ol><li><b>Copy</b> the clinician’s instructions exactly.</li><li><b>Mark</b> each dose step and date.</li><li><b>Check</b> each day, then print or export.</li></ol></section>
   <section class="limits" aria-labelledby="limits-title"><h2 id="limits-title">What this card does not do</h2><p>It records clinician instructions. It does not calculate doses, recommend doses, or check interactions.</p><p>If instructions are unclear, contact your clinician or pharmacist.</p></section>`;
 }
@@ -298,7 +300,7 @@ function terms() {
 }
 
 function notFound() {
-  return `<article class="legal not-found"><p class="eyebrow">TRACK 404</p><h1 tabindex="-1">This page is not on the card</h1><p><a href="/" data-route>Return to StepDown Card</a></p></article>`;
+  return `<article class="legal not-found"><h1 tabindex="-1">Page not found</h1><p>This address does not match a page. Return to your card or try the sample.</p><p class="actions"><a class="primary" href="/" data-route>Return to StepDown Card</a><a href="/?demo=1" data-route>Try it with sample data</a></p></article>`;
 }
 
 function download(name: string, type: string, body: string) {
@@ -383,12 +385,16 @@ function bind() {
     event.preventDefault();
     void navigate(link.pathname + link.search);
   }));
-  document.querySelector('#try-demo')?.addEventListener('click', () => void navigate('/demo'));
   document.querySelector('#start-real')?.addEventListener('click', () => {
     document.querySelector('#schedule-form')?.scrollIntoView({ behavior: 'smooth' });
     document.querySelector<HTMLInputElement>('[name="medication"]')?.focus({ preventScroll: true });
   });
-  document.querySelector('#reset-demo')?.addEventListener('click', () => { schedule = sample(); notice = 'The example card was reset.'; app(); });
+  document.querySelector('#reset-demo')?.addEventListener('click', () => {
+    schedule = sample();
+    notice = 'The example card was reset.';
+    app();
+    document.querySelector<HTMLElement>('#reset-demo')?.focus();
+  });
   document.querySelector('#leave-demo')?.addEventListener('click', async () => {
     await removeStored(DEMO_KEY);
     await navigate('/');
@@ -448,13 +454,18 @@ function bind() {
     app();
   });
   document.querySelector('#edit')?.addEventListener('click', () => { editing = true; app(); document.querySelector<HTMLElement>('h1')?.focus(); });
-  document.querySelector('#cancel-edit')?.addEventListener('click', () => { editing = false; app(); });
+  document.querySelector('#cancel-edit')?.addEventListener('click', () => {
+    editing = false;
+    app();
+    document.querySelector<HTMLElement>('h1')?.focus();
+  });
   document.querySelectorAll<HTMLButtonElement>('.check').forEach(button => button.addEventListener('click', async () => {
     const date = button.dataset.date!;
     if (schedule!.acknowledgements[date]) delete schedule!.acknowledgements[date];
     else schedule!.acknowledgements[date] = new Date().toLocaleString();
     await save();
     app();
+    [...document.querySelectorAll<HTMLButtonElement>('.check')].find(item => item.dataset.date === date)?.focus();
   }));
   document.querySelector('#export-csv')?.addEventListener('click', () => download('stepdown-log.csv', 'text/csv', csvFor(schedule!)));
   document.querySelector('#export-json')?.addEventListener('click', () => download('stepdown-backup.json', 'application/json', JSON.stringify(schedule, null, 2)));

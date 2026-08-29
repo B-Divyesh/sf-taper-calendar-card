@@ -3,6 +3,23 @@ import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 
 const expectedOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173').origin;
+const productRequestPath = /^\/(?:$|demo$|privacy$|terms$|index\.html$|404\.html$|404(?:-targets)?\.css$|404\.js$|manifest\.webmanifest$|favicon\.svg$|icon-(?:180|192|512)\.png$|hero\.webp$|og\.webp$|sw\.js$|assets\/[^/]+$)/;
+
+function recordRequests(page: Page) {
+  const requests: Array<{ method: string; url: string }> = [];
+  page.on('request', request => requests.push({ method: request.method(), url: request.url() }));
+  return requests;
+}
+
+function expectOnlyProductRequests(requests: Array<{ method: string; url: string }>) {
+  expect(requests.length).toBeGreaterThan(0);
+  for (const request of requests) {
+    const url = new URL(request.url);
+    expect(url.origin, request.url).toBe(expectedOrigin);
+    expect(request.method, request.url).toBe('GET');
+    expect(url.pathname, request.url).toMatch(productRequestPath);
+  }
+}
 
 async function createCard(page: Page, options: { start?: string; end?: string; dose?: string } = {}) {
   const start = options.start || '2026-12-31';
@@ -71,17 +88,14 @@ test('@claim:offline-reload reloads the demo without a network after its first v
 });
 
 test('@claim:private-device stores and restores a real card without third-party traffic', async ({ page }) => {
-  const thirdParty: string[] = [];
-  page.on('request', request => {
-    if (new URL(request.url()).origin !== expectedOrigin) thirdParty.push(request.url());
-  });
+  const requests = recordRequests(page);
   await createCard(page);
   await page.getByRole('button', { name: 'Check this day' }).first().click();
   await expect(page.getByRole('button', { name: 'Checked' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Prednisone' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(1);
-  expect(thirdParty).toEqual([]);
+  expectOnlyProductRequests(requests);
 });
 
 test('@claim:backup-roundtrip exports and restores a complete JSON backup', async ({ page }) => {
@@ -130,23 +144,42 @@ test('@claim:no-passphrase-recovery leaves a card locked without the original pa
   await expect(page.getByLabel('Import a backup')).toBeAttached();
 });
 
-test('@claim:demo-unsaved discards demo changes and never writes a demo record', async ({ page }) => {
-  await page.goto('/demo');
+test('@claim:demo-unsaved keeps sample changes out of real storage and discards them', async ({ page }) => {
+  await createCard(page);
+  const realBefore = await storedCardState(page);
+  await page.goto('/?demo=1');
+  await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reset demo' })).toBeVisible();
   await page.getByRole('button', { name: 'Check this day' }).first().click();
-  const stored = await page.evaluate(async () => {
+  const duringDemo = await page.evaluate(async () => {
     const request = indexedDB.open('stepdown-card', 1);
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    return new Promise(resolve => {
-      const get = db.transaction('cards').objectStore('cards').get('demo:stepdown:schedule');
-      get.onsuccess = () => resolve(get.result);
+    return new Promise<{ real?: string; demo?: string }>((resolve, reject) => {
+      const transaction = db.transaction('cards');
+      const cards = transaction.objectStore('cards');
+      const real = cards.get('stepdown:real:card');
+      const demo = cards.get('demo:stepdown:schedule');
+      transaction.oncomplete = () => {
+        db.close();
+        resolve({ real: real.result, demo: demo.result });
+      };
+      transaction.onerror = () => reject(transaction.error);
     });
   });
-  expect(stored).toBeUndefined();
+  expect(duringDemo.real).toBe(realBefore.card);
+  expect(duringDemo.demo).toBeUndefined();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Check this day' }).first().click();
+  await page.getByRole('button', { name: 'Reset demo' }).click();
+  await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reset demo' })).toBeFocused();
+  await page.getByRole('button', { name: 'Leave demo and write a card' }).click();
+  await expect(page.getByLabel('Medication or treatment name')).toHaveValue('Prednisone');
+  expect(await storedCardState(page)).toEqual(realBefore);
 });
 
 test('@claim:print-card opens the browser print flow', async ({ page }) => {
@@ -157,14 +190,12 @@ test('@claim:print-card opens the browser print flow', async ({ page }) => {
 });
 
 test('@claim:free-no-account offers the complete card without checkout or sign-in', async ({ page }) => {
-  const thirdParty: string[] = [];
-  page.on('request', request => {
-    if (new URL(request.url()).origin !== expectedOrigin) thirdParty.push(request.url());
-  });
+  const requests = recordRequests(page);
   await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
   await expect(page.getByText('Free to use. No account or analytics.')).toBeVisible();
   await expect(page.locator('a[href*="checkout"], input[type="email"], input[name="username"]')).toHaveCount(0);
-  expect(thirdParty).toEqual([]);
+  expectOnlyProductRequests(requests);
 });
 
 test('@claim:transcription-only keeps the entered dose and dates unchanged', async ({ page }) => {
@@ -177,10 +208,7 @@ test('@claim:transcription-only keeps the entered dose and dates unchanged', asy
 });
 
 test('@claim:no-clinical-output offers no dose recommendation or interaction checker', async ({ page }) => {
-  const outsideRequests: string[] = [];
-  page.on('request', request => {
-    if (new URL(request.url()).origin !== expectedOrigin) outsideRequests.push(request.url());
-  });
+  const requests = recordRequests(page);
   await page.goto('/');
   await expect(page.getByText('It does not calculate doses, recommend doses, or check interactions.')).toBeVisible();
   await expect(page.getByRole('button', { name: /calculate|recommend|interaction/i })).toHaveCount(0);
@@ -188,14 +216,18 @@ test('@claim:no-clinical-output offers no dose recommendation or interaction che
   await createCard(page, { start: '2026-08-28', end: '2026-08-28', dose: '7 mg copied exactly' });
   await expect(page.getByText('7 mg copied exactly')).toHaveCount(1);
   await expect(page.getByText(/recommended dose|interaction result/i)).toHaveCount(0);
-  expect(outsideRequests).toEqual([]);
+  expectOnlyProductRequests(requests);
 });
 
 test('@claim:clear-device-data removes the saved card', async ({ page }) => {
   await createCard(page);
   await page.evaluate(async () => {
-    indexedDB.deleteDatabase('stepdown-card');
-    await new Promise(resolve => setTimeout(resolve, 50));
+    const request = indexedDB.deleteDatabase('stepdown-card');
+    await new Promise<void>((resolve, reject) => {
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => reject(Error('Database deletion was blocked'));
+    });
   });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Track your taper day by day' })).toBeVisible();
@@ -381,7 +413,8 @@ test('unknown client paths render the designed not-found screen and known legal 
   await page.getByRole('link', { name: 'Card', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/missing-page');
-  await expect(page.getByRole('heading', { name: 'This page is not on the card' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.getByText('This address does not match a page. Return to your card or try the sample.')).toBeVisible();
 });
 
 test('every app route has its own title, metadata, one heading, and focus after navigation', async ({ page }) => {
@@ -401,6 +434,8 @@ test('every app route has its own title, metadata, one heading, and focus after 
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', canonical);
     await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
+    await expect(page.getByText('The collage was generated for StepDown Card.')).toBeVisible();
+    await expect(page.getByText(/provenance is in the design notes/i)).toHaveCount(0);
   }
 });
 
@@ -409,6 +444,10 @@ test('the standalone 404 has complete navigation, metadata, legal links, and a w
   await expect(page).toHaveTitle('Page not found — StepDown Card');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.getByText('TRACK 404')).toHaveCount(0);
+  await expect(page.getByText('This page is not on the card')).toHaveCount(0);
+  await expect(page.getByText('This address does not match a page. Return to your card or try the sample.')).toBeVisible();
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /.+/);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#1f6f5f');
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Page not found — StepDown Card');
@@ -418,13 +457,16 @@ test('the standalone 404 has complete navigation, metadata, legal links, and a w
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveCount(1);
-  await expect(page.getByText(/Built by Param Factory · v1\.4\.0/)).toBeVisible();
+  await expect(page.getByText(/Built by Param Factory · v1\.5\.0 · build 2026-08-29\.1/)).toBeVisible();
   const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href).filter(href => !href.includes('#main')));
   for (const href of new Set(hrefs)) expect((await request.get(href)).ok(), href).toBe(true);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to the message' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('#main')).toBeFocused();
+  await page.getByRole('link', { name: 'Try it with sample data' }).click();
+  await expect(page).toHaveURL(/\/\?demo=1$/);
+  await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
 });
 
 test('the app announces an available service-worker update with a reload action', async ({ page }) => {
@@ -453,12 +495,13 @@ test('keyboard users can skip to content, enter the demo, and toggle a day', asy
   await expect(page.getByRole('link', { name: 'Skip to the schedule' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('#main')).toBeFocused();
-  await page.getByRole('button', { name: 'Try it with sample data' }).focus();
+  await page.getByRole('link', { name: 'Try it with sample data' }).focus();
   await page.keyboard.press('Enter');
   const check = page.getByRole('button', { name: 'Check this day' }).first();
   await check.focus();
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: 'Checked' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Checked' })).toBeFocused();
 });
 
 test('the first screen is complete at 390px and Write my card focuses the editor', async ({ browser }) => {
@@ -469,10 +512,16 @@ test('the first screen is complete at 390px and Write my card focuses the editor
     'Track your taper day by day',
     'For people following clinician instructions who need each dose and checked day in one private card.',
     'Try it with sample data',
+    'Opens a filled sample card. Nothing is saved.',
     'Works after you first open it.',
     'Stores your card on this device.',
     'Free to use. No account or analytics.'
-  ]) await expect(page.getByText(text, { exact: true })).toBeVisible();
+  ]) {
+    const content = page.getByText(text, { exact: true });
+    await expect(content).toBeVisible();
+    await expect(content).toBeInViewport();
+  }
+  await expect(page.getByRole('link', { name: 'Try it with sample data' })).toHaveAttribute('href', '/?demo=1');
   await page.getByRole('button', { name: 'Write my card' }).click();
   await expect(page.getByLabel('Medication or treatment name')).toBeFocused();
   await context.close();
@@ -482,10 +531,11 @@ test('one click shows a realistic date, dose, and check control in the 390px fir
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   await page.goto('/');
-  await page.getByRole('button', { name: 'Try it with sample data' }).click();
-  await expect(page).toHaveURL(/\/demo$/);
+  await page.getByRole('link', { name: 'Try it with sample data' }).click();
+  await expect(page).toHaveURL(/\/\?demo=1$/);
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Prednisone — sample' })).toBeFocused();
   await expect(page.getByText('20 mg once daily').first()).toBeVisible();
   const targets = [page.locator('.day time').first(), page.getByRole('button', { name: 'Check this day' }).first()];
   for (const target of targets) {
@@ -503,7 +553,7 @@ test('the real editor fits 390px and key mobile touch targets are at least 44px'
   const page = await context.newPage();
   await page.goto('/');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  for (const selector of ['nav a', '.remove', 'footer a']) {
+  for (const selector of ['nav a', '.landing .primary', '#start-real', '.remove', 'footer a']) {
     const boxes = await page.locator(selector).evaluateAll(elements => elements.map(element => {
       const rect = element.getBoundingClientRect();
       return { width: rect.width, height: rect.height };

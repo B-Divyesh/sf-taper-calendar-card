@@ -1,6 +1,6 @@
 # Copy audit
 
-Audited 2026-08-28 after polish round 3. Word counts treat a hyphenated term, URL, version, or control name as one word.
+Audited 2026-08-29 after polish round 5. Word counts treat a hyphenated term, URL, version, or control name as one word.
 
 ## Landing `/`
 
@@ -17,8 +17,8 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | Track your taper day by day | 6 | pass |
 | For people following clinician instructions who need each dose and checked day in one private card. | 16 | pass |
 | Try it with sample data | 6 | pass |
-| Loads an example card. | 4 | pass |
-| Nothing is saved. | 3 | pass |
+| Opens a filled sample card. | 5 | pass |
+| Nothing is saved. | 3 | pass; `demo-unsaved` |
 | Write my card | 3 | pass |
 | Works after you first open it. | 6 | pass |
 | Stores your card on this device. | 6 | pass |
@@ -57,8 +57,9 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | A private card for a clinician-provided taper. | 7 | pass |
 | Terms | 1 | pass |
 | Built by Param Factory | 4 | pass |
-| v1.4.0 | 1 | pass |
-| Original generated collage; provenance is in the design notes. | 9 | pass |
+| v1.5.0 | 1 | pass |
+| build 2026-08-29.1 | 2 | pass |
+| The collage was generated for StepDown Card. | 7 | pass |
 
 ## README
 
@@ -71,7 +72,7 @@ This covers every phrase rendered for a fresh visitor, including navigation, con
 | It does not calculate doses, recommend doses, or check interactions. | 10 | pass |
 | Ask a clinician or pharmacist when instructions are unclear. | 9 | pass |
 | Open `http://localhost:5173`. | 2 | pass |
-| Use `http://localhost:5173/demo` for an isolated sample card. | 7 | pass |
+| Use `http://localhost:5173/?demo=1` for an isolated sample card. | 7 | pass |
 | Demo changes stay in memory and are discarded on reload or exit. | 12 | pass |
 | Deploy the generated `dist/` folder as a static site. | 9 | pass |
 | The app saves the files it needs for offline use. | 10 | pass |
@@ -96,6 +97,10 @@ No sentence exceeds 22 words. No sentence uses a banned marketing word. The firs
 | `/demo` | Take the listed dose with breakfast. | 7 | pass |
 | `/privacy` | Clear this site’s data to remove a saved card. | 9 | pass; `clear-device-data` |
 | encrypted recovery | A backup replaces this locked card only when required fields and dates are valid and dose steps do not overlap. | 19 | pass; `backup-validation` |
+| `/404` | Page not found | 3 | pass; names the error directly |
+| `/404` | This address does not match a page. Return to your card or try the sample. | 15 | pass |
+| `/404` | Return to StepDown Card | 4 | pass |
+| `/404` | Try it with sample data | 6 | pass |
 
 ## Terminology
 

@@ -1,1 +1,1 @@
-Copy a clinician-provided taper into a private card and check each scheduled day.
+Copy a clinician-provided taper into a private card, then check each scheduled day.

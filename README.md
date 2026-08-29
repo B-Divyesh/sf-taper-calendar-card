@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Use `http://localhost:5173/demo` for an isolated sample card. Demo changes stay in memory and are discarded on reload or exit.
+Open `http://localhost:5173`. Use `http://localhost:5173/?demo=1` for an isolated sample card. Demo changes stay in memory and are discarded on reload or exit.
 
 ## Test and build
 
