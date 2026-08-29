@@ -1,30 +1,55 @@
-# Review handoff — taper-calendar-card-review-5
+# Repair handoff — taper-calendar-card-polish-5
 
 ## Outcome
 
-Completed a no-code adversarial first-read review of `https://taper-calendar-card.sociobot.in` at repository commit `0bcd346795c7de0c68ed6525ce81b059d3d6abe1`.
+Released the cumulative round-5 repair at `https://taper-calendar-card.sociobot.in`.
 
-The verdict is **FAIL** because two minor copy findings remain. The review report is `.factory/review-5.md`. No product files were changed.
+The visible 404 now says `Page not found` without product metaphor, and the footer now says `The collage was generated for StepDown Card.` The first-screen sample action is a real `/?demo=1` link with a clear result sentence. It opens the populated, isolated Prednisone sample in one click with its persistent banner, Reset action, and exit action.
+
+Demo verification exposed and fixed one extra isolation edge: loading a current real card unnecessarily reserialized its IndexedDB record. Reads no longer rewrite the authoritative record, and the demo claim now proves the real bytes are unchanged before, during, and after sample use.
+
+The cassette-era zine identity, static PWA architecture, original generated collage, local-first storage, exports, printing, and browser encryption are preserved. Version is `1.5.0`; worker cache is `stepdown-v8`.
+
+## Commits and deployment
+
+- Repair commit: `617b2b1895aeb1d70f4938168b815fe9ad1bba0f`.
+- Verification-hardening commit: `6d3073ffa61e101350e4437a447ecdce32bac898`.
+- Both commits were pushed to `origin/main`.
+- Azure Static Web Apps deployment ID: `556b2786-19c1-43b1-bff4-4fe82193c6f9`.
+- Deployed URL: `https://taper-calendar-card.sociobot.in`.
+- Local and live SHA-256: `index.html` = `35b3b4ea0534b90eacd049ccefecc5e4a624e1fc9c7be42433d337040ab47a62`; `sw.js` = `a38c8f04aa6cb5242c280fc19e5df44a6e6c68973804db66b87b7b75aa4ba87d`.
 
 ## Verification
 
-- Installed dependencies with `npm ci`; audit reported zero vulnerabilities.
-- Ran all 14 exact commands declared in `.factory/claims.json` independently from a clean clone; all passed.
-- Ran `npm run typecheck`, `npm run lint`, `npm test` (11 unit and 31 browser tests), and `npm run build`; all passed and `dist/` was produced.
-- Ran the complete 31-test Playwright suite against the live URL; it passed.
-- Opened the live site cold at 390 × 844 and 1440 × 900. The first screen states the job, audience, and sample action clearly; the mobile page has no horizontal overflow.
-- Verified the one-click sample, persistent banner, Reset, separate demo storage behavior, real-data isolation, same-origin request log, and offline reload for `/demo` and `?demo=1`.
-- Crawled live internal destination links and checked `/`, `/demo`, `/privacy`, `/terms`, and the designed 404.
-- Ran fresh axe scans at 390 px for those five routes; zero violations were reported.
-- Rechecked every earlier review, polish, and original verification defect in live behavior and current source/tests.
+- Fresh remote clone: `/tmp/taper-polish5-final.sFTr0w/repo` at `6d3073ffa61e101350e4437a447ecdce32bac898`.
+- `npm ci`: pass; 177 packages, zero vulnerabilities.
+- Every one of the 14 exact `.factory/claims.json` commands: pass independently.
+- `npm run typecheck`: pass.
+- `npm run lint`: pass.
+- `npm test`: pass; 13 unit tests and 31 Playwright tests.
+- `npm run build`: pass; `dist/index.html` present.
+- Bundle: JS 23.49 kB / 8.08 kB gzip; CSS 8.83 kB / 2.89 kB gzip.
+- Local URL verifier: pass with no console errors. Evidence: `.factory/qa-artifacts/polish-5/local-verify/`.
+- Local Lighthouse mobile: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 2.1 s, TBT 0 ms, CLS 0.
+- Cold live Playwright after deployment: 31/31 pass. This includes every claim, offline reload, same-origin request allowlists, zero axe violations in light and dark, keyboard/focus, 390 px layout, 44 px targets, metadata, link crawl, and 404 status/copy.
+- Live URL verifier: pass with no console errors. Evidence: `.factory/qa-artifacts/polish-5/live-verify/`.
+- Live Lighthouse mobile: 100 performance, 100 accessibility, 100 best practices, 100 SEO; FCP 0.8 s, LCP 1.4 s, TBT 0 ms, CLS 0.
+- Live routes: `/`, `/demo`, `/privacy`, and `/terms` = 200; `/missing-page` = 404.
+- Live headers: immutable hashed assets, no-cache service worker, same-origin CSP, Referrer-Policy, and `X-Content-Type-Options` all present.
+- Screenshots: `.factory/qa-artifacts/polish-5/live-verify/screenshot-mobile.png`, `.factory/qa-artifacts/polish-5/live-demo-mobile.png`, `.factory/qa-artifacts/polish-5/live-404-mobile.png`, `.factory/qa-artifacts/polish-5/live-encrypted-lock-mobile.png`, and `.factory/qa-artifacts/polish-5/live-privacy-mobile.png`.
 
-## Run and verify
+Run the gate with:
 
-Use `npm ci`, then `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`. The individual claim commands are in `.factory/claims.json`.
+```bash
+npm ci
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+The exact per-claim commands are in `.factory/claims.json`. The complete finding-to-change-to-evidence map is in `.factory/polish-5.md`.
 
 ## Known gaps and next steps
 
-- F-5-1: replace the 404 eyebrow **“TRACK 404”** and metaphorical h1 **“This page is not on the card”** with a direct **“Page not found”** message.
-- F-5-2: replace **“Original generated collage; provenance is in the design notes.”** with plain wording such as **“The collage was generated for StepDown Card.”**
-
-After those copy changes, rerun the copy audit and route smoke test. No functional or safety defect was found.
+None. Every finding in reviews 1–5, every controller regression, and every original verification defect was rechecked against source, a clean clone, and the deployed site.
